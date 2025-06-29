@@ -1,0 +1,23 @@
+# Azure OpenAI Service
+AZURE_OPENAI_API_KEY=your-azure-openai-api-key
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=default-gpt-deployment
+
+# Multi-model support (optional, fallback to AZURE_OPENAI_DEPLOYMENT if not set)
+AZURE_OPENAI_DEPLOYMENT_PM=pm-gpt-deployment
+AZURE_OPENAI_DEPLOYMENT_ARCHITECT=architect-gpt-deployment
+AZURE_OPENAI_DEPLOYMENT_DEVELOPER=developer-gpt-deployment
+AZURE_OPENAI_DEPLOYMENT_REVIEWER=reviewer-gpt-deployment
+AZURE_OPENAI_DEPLOYMENT_TESTER=tester-gpt-deployment
+
+# Environment
+ENVIRONMENT=development
+
+# (Optional) GitHub Integration
+GITHUB_TOKEN=your-github-token
+GITHUB_REPO=your-org/your-repo
+
+# (Optional) Jira Integration
+JIRA_API_TOKEN=your-jira-api-token
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your-email@example.com 

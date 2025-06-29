@@ -1,0 +1,11 @@
+crewai
+fastapi
+uvicorn
+openai
+azure-identity
+python-dotenv
+pydantic
+gitpython
+httpx
+pytest
+pydantic-settings 
