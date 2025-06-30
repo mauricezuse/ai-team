@@ -20,4 +20,9 @@ GITHUB_REPO=your-org/your-repo
 # (Optional) Jira Integration
 JIRA_API_TOKEN=your-jira-api-token
 JIRA_BASE_URL=https://your-domain.atlassian.net
-JIRA_EMAIL=your-email@example.com 
+JIRA_EMAIL=your-email@example.com
+
+PROJECT_KEY=NEGISHI
+
+USE_REAL_GITHUB=false
+USE_REAL_JIRA=false 
