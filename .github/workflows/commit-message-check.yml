@@ -1,0 +1,26 @@
+name: Commit Message Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited]
+  push:
+    branches:
+      - main
+      - 'release/*'
+
+jobs:
+  commit-message-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Check commit messages
+        run: |
+          regex="NEGISHI-[0-9]+"
+          for commit in $(git rev-list ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}); do
+            msg=$(git log --format=%B -n 1 $commit)
+            if ! echo "$msg" | grep -qE "$regex"; then
+              echo "::error::Commit $commit message does not include required project key (NEGISHI-XXX)"
+              exit 1
+            fi
+          done 

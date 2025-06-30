@@ -1,0 +1,12 @@
+#!/bin/sh
+# commit-msg git hook to enforce project key in commit messages
+# To install: cp .githooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+
+PROJECT_KEY="NEGISHI"
+PATTERN="$PROJECT_KEY-[0-9]+"
+
+commit_msg_file=$1
+if ! grep -qE "$PATTERN" "$commit_msg_file"; then
+  echo "Error: Commit message must include the project key (e.g., $PROJECT_KEY-123)" >&2
+  exit 1
+fi 

@@ -74,3 +74,37 @@ ai-team/
 
 ## License
 MIT 
+
+## Commit Message Enforcement (Project Key)
+
+This project enforces that all commit messages include the project key (e.g., `NEGISHI-123`) using a hybrid approach:
+
+### 1. Dockerfile (for containerized agents)
+- The Dockerfile automatically installs the `commit-msg` git hook in every container.
+- **No manual steps required** when using Docker.
+
+### 2. Setup Script (for flexible/local/CI environments)
+- Use the provided `setup_hooks.sh` script to install the hook in any environment.
+- **Usage:**
+  ```sh
+  ./setup_hooks.sh
+  ```
+  (Run from the root of your git repository.)
+
+### 3. CI/CD Enforcement
+- A GitHub Actions workflow checks all commit messages in PRs and pushes to protected branches.
+- **No non-compliant commits can be merged.**
+
+### 4. Agent Code Enforcement
+- All AI agents (via `GitHubService`) programmatically ensure commit/PR messages include the project key.
+
+---
+
+## Onboarding Checklist for New Environments/Agents
+- [ ] If using Docker, build your container as usual (hook is installed automatically).
+- [ ] If not using Docker, run `./setup_hooks.sh` after cloning the repo.
+- [ ] Ensure the `PROJECT_KEY` is set in your `.env` file for correct enforcement.
+- [ ] All commit and PR messages must include the project key (e.g., `NEGISHI-123`).
+- [ ] The CI/CD workflow will block any non-compliant commits.
+
+--- 
