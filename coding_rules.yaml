@@ -1,0 +1,17 @@
+# Centralized Coding & Architecture Rules for AI-Team
+# These rules are referenced by all agents and can be updated by the architect.
+coding_style:
+  imports: full_path  # Options: full_path, relative
+  naming_convention: snake_case  # Options: snake_case, camelCase, PascalCase
+  docstrings: required  # Options: required, optional, none
+  backend_framework: FastAPI  # Example: FastAPI, Django, Flask
+  type_hints: required  # Options: required, optional, none
+architecture:
+  layering: service-repository-controller
+  error_handling: centralized
+  logging: structured  # Options: structured, simple, none
+  database_access: repository_pattern
+review:
+  linting: true
+  static_analysis: true
+  test_coverage: 80  # Minimum percent 

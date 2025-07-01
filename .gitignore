@@ -24,3 +24,8 @@ infra/.terraform/
 # OS
 .DS_Store
 Thumbs.db 
+
+frontend
+codebase_index_cache.json
+workflow_results
+jira-openapi.json
