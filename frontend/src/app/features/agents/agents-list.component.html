@@ -1,1 +1,42 @@
 <p>agents-list works!</p>
+
+<p-table [value]="agents" selectionMode="single" [(selection)]="selectedAgent" (onRowSelect)="viewAgent($event)">
+  <ng-template pTemplate="header">
+    <tr>
+      <th>Name</th>
+      <th>Role</th>
+      <th>Goal</th>
+      <th>Actions</th>
+    </tr>
+  </ng-template>
+  <ng-template pTemplate="body" let-agent>
+    <tr>
+      <td>{{ agent.name }}</td>
+      <td>{{ agent.role }}</td>
+      <td>{{ agent.goal }}</td>
+      <td>
+        <button pButton type="button" icon="pi pi-eye" (click)="viewAgent(agent)"></button>
+        <button pButton type="button" icon="pi pi-trash" class="p-button-danger" (click)="deleteAgent(agent)"></button>
+      </td>
+    </tr>
+  </ng-template>
+</p-table>
+<button pButton type="button" label="Add Agent" icon="pi pi-plus" (click)="showAddDialog()"></button>
+
+<p-dialog header="Add Agent" [(visible)]="displayAddDialog" [modal]="true">
+  <form (ngSubmit)="addAgent()">
+    <div class="p-field">
+      <label for="name">Name</label>
+      <input id="name" type="text" pInputText [(ngModel)]="newAgent.name" name="name" required>
+    </div>
+    <div class="p-field">
+      <label for="role">Role</label>
+      <input id="role" type="text" pInputText [(ngModel)]="newAgent.role" name="role" required>
+    </div>
+    <div class="p-field">
+      <label for="goal">Goal</label>
+      <input id="goal" type="text" pInputText [(ngModel)]="newAgent.goal" name="goal" required>
+    </div>
+    <button pButton type="submit" label="Save"></button>
+  </form>
+</p-dialog>
