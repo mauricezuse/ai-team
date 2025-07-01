@@ -1,1 +1,35 @@
 <p>workflows-list works!</p>
+
+<p-table [value]="workflows" selectionMode="single" [(selection)]="selectedWorkflow" (onRowSelect)="viewWorkflow($event)">
+  <ng-template pTemplate="header">
+    <tr>
+      <th>Name</th>
+      <th>Status</th>
+      <th>Agents</th>
+      <th>Actions</th>
+    </tr>
+  </ng-template>
+  <ng-template pTemplate="body" let-workflow>
+    <tr>
+      <td>{{ workflow.name }}</td>
+      <td>{{ workflow.status }}</td>
+      <td>{{ workflow.agents?.length }}</td>
+      <td>
+        <button pButton type="button" icon="pi pi-eye" (click)="viewWorkflow(workflow)"></button>
+        <button pButton type="button" icon="pi pi-play" (click)="startWorkflow(workflow)"></button>
+        <button pButton type="button" icon="pi pi-trash" class="p-button-danger" (click)="deleteWorkflow(workflow)"></button>
+      </td>
+    </tr>
+  </ng-template>
+</p-table>
+<button pButton type="button" label="Add Workflow" icon="pi pi-plus" (click)="showAddDialog()"></button>
+
+<p-dialog header="Add Workflow" [(visible)]="displayAddDialog" [modal]="true">
+  <form (ngSubmit)="addWorkflow()">
+    <div class="p-field">
+      <label for="name">Name</label>
+      <input id="name" type="text" pInputText [(ngModel)]="newWorkflow.name" name="name" required>
+    </div>
+    <button pButton type="submit" label="Save"></button>
+  </form>
+</p-dialog>
