@@ -1,1 +1,13 @@
-<p>workflow-detail works!</p>
+<div *ngIf="workflow">
+  <h2>{{ workflow.name }}</h2>
+  <p><strong>Status:</strong> {{ workflow.status }}</p>
+  <div *ngIf="workflow.agents">
+    <p><strong>Agents:</strong></p>
+    <ul>
+      <li *ngFor="let agent of workflow.agents">{{ agent }}</li>
+    </ul>
+  </div>
+</div>
+<div *ngIf="!workflow">
+  <p>Loading...</p>
+</div>
