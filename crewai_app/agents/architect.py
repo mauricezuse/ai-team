@@ -6,6 +6,9 @@ from crewai_app.config import settings
 import hashlib
 import json
 import os
+import itertools
+from crewai_app.utils.logger import logger
+import time
 
 CACHE_PATH = os.path.join(os.path.dirname(__file__), '../../workflow_results/llm_cache.json')
 
@@ -25,6 +28,19 @@ def _save_llm_cache(cache):
 def _cache_key(prompt):
     return hashlib.sha256(prompt.encode('utf-8')).hexdigest()
 
+# Parse comma-separated deployment names from config
+architect_deployments = [d.strip() for d in getattr(settings, 'deployment_architect', '').split(',') if d.strip()]
+deployment_cycle = itertools.cycle(architect_deployments) if architect_deployments else None
+
+def get_next_deployment():
+    if deployment_cycle:
+        deployment = next(deployment_cycle)
+        logger.info(f"[Architect] Selected deployment: {deployment}")
+        return deployment
+    deployment = getattr(settings, 'deployment_architect', None)
+    logger.info(f"[Architect] Selected deployment (fallback): {deployment}")
+    return deployment
+
 class ArchitectTool(BaseTool):
     name: str = "architect_tool"
     description: str = "Generates architecture designs using OpenAI."
@@ -34,119 +50,81 @@ class ArchitectTool(BaseTool):
         super().__init__()
         self._openai_service = openai_service
 
-    def _run(self, prompt: str) -> str:
-        return self._openai_service.generate(prompt)
+    def _run(self, prompt: str, deployment=None) -> str:
+        return self._openai_service.generate(prompt, deployment=deployment)
 
     def greet(self):
         return self._run("Say hello from the Architect agent!")
 
 class ArchitectAgent:
-    def select_relevant_files(self, story, pm_suggestions, codebase_index):
-        """
-        Use the LLM to select the most relevant files from the codebase index for the given story and PM suggestions.
-        Returns a list of file paths.
-        """
-        description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
-        summary = story['fields'].get('summary', '') if isinstance(story, dict) else ''
-        prompt = (
-            f"Given the following Jira story, PM suggestions, and codebase index, select the most relevant files for implementation.\n"
-            f"Jira Story Description: {description}\n"
-            f"Summary: {summary}\n"
-            f"PM Suggestions: {pm_suggestions}\n"
-            f"Codebase Index: {list(codebase_index.keys())}\n"
-            f"Output a Python list of file paths."
-        )
-        cache = _load_llm_cache()
-        key = _cache_key(prompt)
-        if key in cache:
-            files_str = cache[key]
-        else:
-            files_str = architect_tool._run(prompt)
-            cache[key] = files_str
-            _save_llm_cache(cache)
-        try:
-            files = eval(files_str, {"__builtins__": {}})
-            if isinstance(files, list) and all(isinstance(f, str) for f in files):
-                return files
-        except Exception:
-            pass
-        # Fallback: return all files
-        return list(codebase_index.keys())
+    def __init__(self, openai_service, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.llm_service = openai_service
 
-    def review_and_plan(self, story, pm_suggestions, global_rules, codebase_index):
-        # Two-stage: first select relevant files, then plan
-        selected_files = self.select_relevant_files(story, pm_suggestions, codebase_index)
-        selected_index = {f: codebase_index[f] for f in selected_files if f in codebase_index}
+    def _cache_get(self, key):
+        if not hasattr(self, '_llm_cache'):
+            self._llm_cache = {}
+        return self._llm_cache.get(key)
+
+    def _cache_set(self, key, value):
+        if not hasattr(self, '_llm_cache'):
+            self._llm_cache = {}
+        self._llm_cache[key] = value
+
+    def _prompt_hash(self, prompt):
+        return hashlib.sha256(prompt.encode('utf-8')).hexdigest()
+
+    def select_relevant_files(self, story, pm_suggestions, codebase_index):
         description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
         summary = story['fields'].get('summary', '') if isinstance(story, dict) else ''
-        prompt = (
-            f"You are an expert software architect. Given the following Jira story, PM suggestions, and selected codebase files, "
-            f"create a detailed implementation plan. Specify backend and frontend requirements, file locations, and architectural patterns.\n"
-            f"Jira Story Description: {description}\n"
-            f"Summary: {summary}\n"
-            f"PM Suggestions: {pm_suggestions}\n"
-            f"Selected Codebase Files: {selected_index}\n"
-            f"Output a Python dict with keys: 'backend', 'frontend', 'files', 'patterns', 'notes'."
-        )
-        cache = _load_llm_cache()
-        key = _cache_key(prompt)
+        description = str(description)[:250]
+        pm_suggestions = str(pm_suggestions)[:250]
+        file_paths = list(codebase_index.keys())[:10]
+        prompt = f"Story: {summary}\nDescription: {description}\nPM Suggestions: {pm_suggestions}\nFiles: {file_paths}"
+        if len(prompt) > 2000:
+            prompt = f"Story: {summary[:100]}\nFiles: {[f[:40] for f in file_paths]}"
+        prompt_hash = self._prompt_hash(prompt)
+        cached = self._cache_get(prompt_hash)
+        if cached:
+            return cached
+        time.sleep(10)  # Throttle architect LLM calls
+        deployment = get_next_deployment()
+        logger.info(f"[ArchitectAgent] Using deployment: {deployment} for select_relevant_files")
         try:
-            if key in cache:
-                plan_str = cache[key]
-            else:
-                plan_str = architect_tool._run(prompt)
-                cache[key] = plan_str
-                _save_llm_cache(cache)
-            plan = eval(plan_str, {"__builtins__": {}})
-            if isinstance(plan, dict):
-                updated_rules = global_rules.copy()
-                updated_rules['coding_style']['imports'] = 'full_path'
-                llm_feedback = self.llm_validate_plan(plan, selected_index)
-                plan['llm_feedback'] = llm_feedback
-                return plan, updated_rules
+            result = self.llm_service.generate(prompt, deployment=deployment, step="select_relevant_files")
+            self._cache_set(prompt_hash, result)
+            return result
         except Exception as e:
-            # Fallback: retry with a smaller prompt if rate limit or prompt too large
-            print(f"[Architect] Rate limit or prompt too large encountered: {e}. Retrying with smaller prompt.")
-            small_prompt = (
-                f"You are an expert software architect. Given the following Jira story summary, PM suggestions, and a list of file names, "
-                f"create a high-level implementation plan. Only list backend/frontend requirements and file names.\n"
-                f"Summary: {summary}\n"
-                f"PM Suggestions: {pm_suggestions}\n"
-                f"File Names: {list(selected_index.keys())}\n"
-                f"Output a Python dict with keys: 'backend', 'frontend', 'files', 'patterns', 'notes'."
-            )
-            try:
-                plan_str = architect_tool._run(small_prompt)
-                plan = eval(plan_str, {"__builtins__": {}})
-                if isinstance(plan, dict):
-                    updated_rules = global_rules.copy()
-                    updated_rules['coding_style']['imports'] = 'full_path'
-                    plan['llm_feedback'] = '[Fallback: Used smaller prompt due to rate limit or prompt size]'
-                    return plan, updated_rules
-            except Exception as e2:
-                print(f"[Architect] Fallback prompt also failed: {e2}")
-        # Fallback to previous logic
-        target_file = None
-        target_function = None
-        for file, info in selected_index.items():
-            if info['functions']:
-                target_file = file
-                target_function = info['functions'][0]['name']
-                break
-        plan = {
-            "implementation": f"Add logic to {target_function} in {target_file}",
-            "details": {
-                "file": target_file,
-                "function": target_function,
-                "pattern": global_rules['architecture']['layering'],
-                "notes": "Use full path imports and follow existing error handling."
-            },
-            "tech_stack": "FastAPI, MySQL"
-        }
-        updated_rules = global_rules.copy()
-        updated_rules['coding_style']['imports'] = 'full_path'
-        plan['llm_feedback'] = '[Fallback: Used stub plan due to repeated errors]'
-        return plan, updated_rules
+            logger.warning(f"ArchitectAgent.select_relevant_files fallback: {e}")
+            fallback = f"Files: {[f[:40] for f in file_paths]}"
+            self._cache_set(prompt_hash, fallback)
+            return fallback
+
+    def review_and_plan(self, story, pm_suggestions, selected_index):
+        description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
+        summary = story['fields'].get('summary', '') if isinstance(story, dict) else ''
+        description = str(description)[:250]
+        pm_suggestions = str(pm_suggestions)[:250]
+        file_names = list(selected_index.keys())[:5]
+        prompt = f"Story: {summary}\nDescription: {description}\nPM Suggestions: {pm_suggestions}\nSelected Files: {file_names}"
+        if len(prompt) > 2000:
+            prompt = f"Story: {summary[:100]}\nFiles: {[f[:40] for f in file_names]}"
+        prompt_hash = self._prompt_hash(prompt)
+        cached = self._cache_get(prompt_hash)
+        if cached:
+            return cached, {}
+        time.sleep(10)  # Throttle architect LLM calls
+        deployment = get_next_deployment()
+        logger.info(f"[ArchitectAgent] Using deployment: {deployment} for review_and_plan")
+        try:
+            result = self.llm_service.generate(prompt, deployment=deployment, step="review_and_plan")
+            self._cache_set(prompt_hash, result)
+            return result, {}
+        except Exception as e:
+            logger.warning(f"ArchitectAgent.review_and_plan fallback: {e}")
+            fallback = f"Files: {[f[:40] for f in file_names]}"
+            self._cache_set(prompt_hash, fallback)
+            return fallback, {}
 
     def llm_validate_plan(self, plan, codebase_index):
         prompt = (

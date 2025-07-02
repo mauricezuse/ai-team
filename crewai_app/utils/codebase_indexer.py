@@ -61,7 +61,7 @@ INDEX_CACHE_FILE = 'codebase_index_cache.json'
 EMBEDDING_CACHE_FILE = 'embedding_cache.json'
 
 # --- Plugin system for file selection/indexing ---
-PLUGIN_REGISTRY = {}
+PLUGIN_REGISTRY: dict[str, Callable] = {}
 
 def register_plugin(name: str):
     def decorator(func):
@@ -247,6 +247,9 @@ def get_embedding(text: str, model: str = 'text-embedding-ada-002') -> list:
     """
     Get embedding for text using OpenAI API, with caching. Compatible with openai>=1.0.0.
     """
+    if not text or not text.strip():
+        logging.error("get_embedding called with empty or whitespace-only input. Aborting embedding call.")
+        raise RuntimeError("get_embedding called with empty or whitespace-only input.")
     cache = load_embedding_cache()
     key = hashlib.sha256((model + text).encode('utf-8')).hexdigest()
     if cache and key in cache:
@@ -269,8 +272,8 @@ def get_embedding(text: str, model: str = 'text-embedding-ada-002') -> list:
         update_embedding_cache(key, vec)
         return vec
     except Exception as e:
-        logging.warning(f"Embedding failed: {e}")
-        return []
+        logging.error(f"Embedding failed: {e}")
+        raise RuntimeError(f"Embedding failed: {e}")
 
 def load_embedding_cache(cache_file: str = EMBEDDING_CACHE_FILE) -> Optional[dict]:
     if not os.path.exists(cache_file):
