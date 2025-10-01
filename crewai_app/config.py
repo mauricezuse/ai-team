@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     deployment_developer: Optional[str] = os.getenv("AZURE_OPENAI_DEPLOYMENT_DEVELOPER", azure_openai_deployment)
     deployment_reviewer: Optional[str] = os.getenv("AZURE_OPENAI_DEPLOYMENT_REVIEWER", azure_openai_deployment)
     deployment_tester: Optional[str] = os.getenv("AZURE_OPENAI_DEPLOYMENT_REVIEWER", azure_openai_deployment)
+    deployment_frontend: Optional[str] = os.getenv("AZURE_OPENAI_DEPLOYMENT_FRONTEND", azure_openai_deployment)
     project_key: Optional[str] = os.getenv("PROJECT_KEY", "NEGISHI")
     use_real_github: bool = os.getenv("USE_REAL_GITHUB", "false").lower() == "true"
     use_real_jira: bool = os.getenv("USE_REAL_JIRA", "false").lower() == "true"

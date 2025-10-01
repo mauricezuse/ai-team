@@ -14,6 +14,7 @@ MODEL_NAMES[REVIEWER]="gpt-4o"
 MODEL_NAMES[ARCHITECT]="gpt-4.1"
 MODEL_NAMES[PM]="gpt-35-turbo"
 MODEL_NAMES[TESTER]="gpt-4o"
+MODEL_NAMES[FRONTEND]="gpt-4.1"
 
 typeset -A MODEL_VERSIONS
 MODEL_VERSIONS[DEVELOPER]="2025-04-14"
@@ -21,6 +22,7 @@ MODEL_VERSIONS[REVIEWER]="2024-08-06"
 MODEL_VERSIONS[ARCHITECT]="2025-04-14"
 MODEL_VERSIONS[PM]="0125"
 MODEL_VERSIONS[TESTER]="2024-08-06"
+MODEL_VERSIONS[FRONTEND]="2025-04-14"
 
 typeset -A DEPLOYMENT_NAMES
 DEPLOYMENT_NAMES[DEVELOPER]="developer-gpt-4.1"
@@ -28,6 +30,7 @@ DEPLOYMENT_NAMES[REVIEWER]="reviewer-gpt-4o"
 DEPLOYMENT_NAMES[ARCHITECT]="architect-gpt-4.1"
 DEPLOYMENT_NAMES[PM]="pm-gpt-35-turbo"
 DEPLOYMENT_NAMES[TESTER]="tester-gpt-4o"
+DEPLOYMENT_NAMES[FRONTEND]="frontend-gpt-4.1"
 
 typeset -A MODEL_SKUS
 MODEL_SKUS[DEVELOPER]="GlobalStandard"
@@ -35,6 +38,7 @@ MODEL_SKUS[REVIEWER]="GlobalStandard"
 MODEL_SKUS[ARCHITECT]="GlobalStandard"
 MODEL_SKUS[PM]="Standard"
 MODEL_SKUS[TESTER]="GlobalStandard"
+MODEL_SKUS[FRONTEND]="GlobalStandard"
 
 # Architect deployments for load balancing
 ARCHITECT_DEPLOYMENTS=("architect-gpt-4.1-a" "architect-gpt-4.1-b" "architect-gpt-4.1-c")
@@ -67,7 +71,7 @@ az cognitiveservices account create \
 
 # Deploy models (idempotent, supports multiple architect deployments)
 echo "Deploying models..."
-for role in DEVELOPER REVIEWER PM TESTER; do
+for role in DEVELOPER REVIEWER PM TESTER FRONTEND; do
   DEPLOYMENT_NAME="${DEPLOYMENT_NAMES[$role]}"
   echo "Checking if deployment $DEPLOYMENT_NAME exists..."
   STATE=$(az cognitiveservices account deployment show \
@@ -160,10 +164,11 @@ echo "AZURE_OPENAI_DEPLOYMENT_DEVELOPER=${DEPLOYMENT_NAMES[DEVELOPER]}"
 echo "AZURE_OPENAI_DEPLOYMENT_REVIEWER=${DEPLOYMENT_NAMES[REVIEWER]}"
 echo "AZURE_OPENAI_DEPLOYMENT_PM=${DEPLOYMENT_NAMES[PM]}"
 echo "AZURE_OPENAI_DEPLOYMENT_TESTER=${DEPLOYMENT_NAMES[TESTER]}"
+echo "AZURE_OPENAI_DEPLOYMENT_FRONTEND=${DEPLOYMENT_NAMES[FRONTEND]}"
 echo "\nOther environment variables (GitHub, Jira, etc.) should also be set as needed."
 
 echo "\nDeployment names used:"
-for role in DEVELOPER REVIEWER ARCHITECT PM TESTER; do
+for role in DEVELOPER REVIEWER ARCHITECT PM TESTER FRONTEND; do
   echo "  $role: "
   echo "    Model: ${MODEL_NAMES[$role]}"
   echo "    Version: ${MODEL_VERSIONS[$role]}"

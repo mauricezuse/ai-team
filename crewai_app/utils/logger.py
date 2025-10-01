@@ -29,4 +29,21 @@ if not logger.hasHandlers():
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
+# Add handlers to all ai_team.* loggers
+def attach_handlers_to_all_ai_team_loggers():
+    for name in logging.root.manager.loggerDict:
+        if name.startswith('ai_team.'):
+            l = logging.getLogger(name)
+            l.setLevel(LOG_LEVEL)
+            l.propagate = True
+            if not l.hasHandlers():
+                l.addHandler(file_handler)
+                l.addHandler(console_handler)
+
+attach_handlers_to_all_ai_team_loggers()
+
+# Test log lines for agent loggers
+logging.getLogger('ai_team.developer').info('[LoggerTest] DeveloperAgent logger is active.')
+logging.getLogger('ai_team.frontend').info('[LoggerTest] FrontendAgent logger is active.')
+
 # Usage: from crewai_app.utils.logger import logger 

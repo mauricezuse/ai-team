@@ -10,6 +10,7 @@ import subprocess
 import os
 from crewai_app.utils.text import strip_code_fences
 import ast
+from crewai_app.agents.base import BaseAgent
 
 class CodeGeneratorTool(BaseTool):
     name: str = "code_generator_tool"
@@ -30,7 +31,29 @@ class CodeGeneratorTool(BaseTool):
         """Generate code based on the given prompt."""
         return self._openai_service.generate(prompt, step="developer.implement")
 
-class DeveloperAgent:
+class DeveloperAgent(BaseAgent):
+    # Backend-specific prompt template
+    BASE_PROMPT = (
+        "You are an expert Python/FastAPI backend developer with deep understanding of codebases.\n"
+        "IMPORTANT: When updating existing files, analyze the current content and make intelligent, surgical updates.\n"
+        "Preserve existing imports, classes, functions, and structure unless they need modification for the task.\n"
+        "If frontend changes are required, collaborate with the frontend agent.\n"
+        "If requirements are unclear, escalate to the architect or PM agent.\n"
+        "Output only valid Python code, with no extra commentary.\n"
+        "Use the provided codebase context to understand existing patterns and dependencies.\n"
+        "Always include or update tests: unit tests, integration tests, and Playwright tests as applicable.\n"
+    )
+    def __init__(self, llm_service, *args, **kwargs):
+        super().__init__(
+            llm_service=llm_service,
+            name="developer",
+            role="Backend Developer",
+            goal="Write Angular and Python code for the designed stories.",
+            backstory="A passionate developer who loves clean, production-ready code.",
+            tools=[],
+        )
+        self.logger.info(f"[DeveloperAgent.__init__] Instantiated with llm_service={type(llm_service)} deployment={getattr(llm_service, 'deployment', None)}")
+
     def implement_story(self, story, plan, rules):
         # If the story is a prompt string, generate both backend and frontend stubs
         if isinstance(story, str):
@@ -69,13 +92,17 @@ class DeveloperAgent:
             implementation_result["warning"] = "Architect plan missing file/function details."
         return implementation_result
 
-    def break_down_story(self, story, plan, rules, max_retries=2):
-        """
-        Use the LLM to break down a story into up to 3 actionable development tasks/subtasks with clear titles and acceptance criteria.
-        Returns a list of dicts: [{"title": ..., "description": ..., "acceptance_criteria": ...}, ...]
-        Robust to LLM output errors: requires valid JSON, retries with fallback prompt if needed.
-        """
+    def break_down_story(self, story, plan, rules, api_contracts=None, max_retries=2):
+        import re, json, logging
+        print(f"[DeveloperAgent.break_down_story] ENTERED with story={story!r}, plan={plan!r}, rules={rules!r}, api_contracts={api_contracts!r}")
+        self.logger.info(f"[break_down_story] ENTERED with story={story!r}, plan={plan!r}, rules={rules!r}, api_contracts={api_contracts!r}")
+        if not story or not plan:
+            print(f"[DeveloperAgent.break_down_story] SKIPPING: story or plan is None/empty. story={story!r}, plan={plan!r}")
+            self.logger.warning(f"[break_down_story] SKIPPING: story or plan is None/empty. story={story!r}, plan={plan!r}")
+            return []
+        contract_section = f"API/Data Contracts: {api_contracts}\n" if api_contracts else ""
         base_prompt = (
+            contract_section +
             f"Break down the following story into up to 3 actionable development tasks. For each task, provide a title, a short description, and acceptance criteria.\n"
             f"Output a JSON list of dicts with keys: 'title', 'description', 'acceptance_criteria'.\n"
             f"Do NOT wrap your output in triple backticks, code fences, or a code block. Output only raw JSON.\n"
@@ -83,23 +110,34 @@ class DeveloperAgent:
             f"Story: {story}\nRules: {rules}\n"
         )
         fallback_prompt = (
+            contract_section +
             f"Return a JSON list with a single task: title 'Implement Story', description 'Implement the story as described', and acceptance criteria matching the story's acceptance criteria.\n"
             f"Do NOT wrap your output in triple backticks, code fences, or a code block. Output only raw JSON.\n"
             f"Story: {story}\nRules: {rules}\n"
         )
         for attempt in range(1, max_retries + 2):
             prompt = base_prompt if attempt == 1 else fallback_prompt
-            result_str = developer_tool._run(prompt)
-            logging.info(f"[DeveloperAgent] break_down_story LLM output (attempt {attempt}): {result_str}")
-            # Strip code fences and 'json' tags
-            cleaned = re.sub(r"^```json\\s*|^```|```$", "", result_str.strip(), flags=re.IGNORECASE | re.MULTILINE).strip()
+            self.logger.info(f"[break_down_story] LLM call attempt {attempt} with prompt: {prompt}")
             try:
+                result_str = self.llm_service.generate(prompt, step="developer.break_down_story")
+                self.last_llm_output = result_str
+                self.logger.info(f"[break_down_story] LLM output (attempt {attempt}): {result_str}")
+                cleaned = re.sub(r"^```json\\s*|^```|```$", "", result_str.strip(), flags=re.IGNORECASE | re.MULTILINE).strip()
+                self.logger.info(f"[break_down_story] Cleaned output (attempt {attempt}): {cleaned}")
                 tasks = json.loads(cleaned)
                 if isinstance(tasks, list) and all(isinstance(t, dict) for t in tasks):
+                    self.logger.info(f"[break_down_story] Parsed tasks (attempt {attempt}): {tasks}")
                     return tasks
             except Exception as e:
-                logging.error(f"[DeveloperAgent] Error parsing LLM output in break_down_story (attempt {attempt}): {e}\nOutput: {result_str}")
-        raise ValueError("LLM did not return any valid tasks for break_down_story after retries.")
+                self.logger.error(f"[break_down_story] Error in attempt {attempt}: {e}\nOutput: {locals().get('result_str', None)}")
+        # Fallback: return a single generic task if all attempts fail
+        fallback_task = [{
+            "title": "Implement Story",
+            "description": "Implement the story as described",
+            "acceptance_criteria": f"Acceptance criteria: {story}"
+        }]
+        self.logger.warning(f"[break_down_story] Returning fallback task: {fallback_task}")
+        return fallback_task
 
     def select_relevant_files(self, task, plan, codebase_index):
         """
@@ -113,14 +151,18 @@ class DeveloperAgent:
             f"Codebase Index: {list(codebase_index.keys())}\n"
             f"Output a Python list of file paths."
         )
-        files_str = developer_tool._run(prompt)
+        self.logger.info(f"[select_relevant_files] LLM prompt: {prompt}")
+        files_str = self.llm_service.generate(prompt, step="developer.select_relevant_files")
+        self.logger.info(f"[select_relevant_files] LLM output: {files_str}")
         try:
             files = eval(files_str, {"__builtins__": {}})
             if isinstance(files, list) and all(isinstance(f, str) for f in files):
+                self.logger.info(f"[select_relevant_files] Parsed files: {files}")
                 return files
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.error(f"[select_relevant_files] Error parsing output: {e}\nOutput: {files_str}")
         # Fallback: return all files
+        self.logger.warning(f"[select_relevant_files] Returning all files as fallback.")
         return list(codebase_index.keys())
 
     def _file_committed_in_branch(self, file_path, branch, repo_root):
@@ -137,18 +179,23 @@ class DeveloperAgent:
             logging.warning(f"[DeveloperAgent] Could not check git history for {file_path}: {e}")
             return False
 
-    def implement_task(self, task, plan, rules, codebase_index, checkpoint=None, save_checkpoint=None, branch=None, repo_root=None):
-        prompt = None
-        result_str = None
-        # --- Hybrid Multi-file/Two-pass Approach ---
+    def implement_task(self, task, plan, rules, codebase_index, checkpoint=None, save_checkpoint=None, branch=None, repo_root=None, api_contracts=None):
+        import re, ast, logging
+        contract_section = f"API/Data Contracts: {api_contracts}\n" if api_contracts else ""
+        def strip_code_fences(text):
+            return re.sub(r"^```[a-zA-Z]*\\s*|```$", "", text.strip(), flags=re.IGNORECASE | re.MULTILINE).strip()
+        def output_validator(text):
+            try:
+                result = ast.literal_eval(text)
+                if isinstance(result, list) and all(isinstance(f, dict) and 'file' in f and 'code' in f for f in result):
+                    return result
+            except Exception:
+                pass
+            return None
         def build_multifile_prompt(task, plan, rules, codebase_index):
             return (
-                "You are an expert Python/FastAPI backend developer.\n"
-                "Your task is to implement the following feature as part of a production codebase.\n"
-                "If the task requires changes in multiple files (e.g., models, endpoints, serializers), output a Python list of dicts, each with 'file' and 'code' keys, one per file. Do not put unrelated logic in a single file.\n"
-                "Output format example:\n"
-                "[\n  {\"file\": \"backend/apps/platform_service/api/endpoints/user.py\", \"code\": \"<endpoint code>\"},\n  {\"file\": \"backend/apps/platform_service/models/freelancer.py\", \"code\": \"<model code>\"}\n]\n"
-                "Do NOT output explanations, summaries, or code fences. If you cannot generate valid code for a file, omit it from the list.\n"
+                contract_section +
+                self.BASE_PROMPT +
                 "---\n"
                 f"Task: {task}\n"
                 f"Implementation Plan: {plan}\n"
@@ -158,116 +205,138 @@ class DeveloperAgent:
             )
         def build_file_list_prompt(task, plan, rules, codebase_index):
             return (
-                "List all files that need to be created or modified to implement the following task. Output ONLY a valid Python list of file paths, with NO extra commentary, explanations, or text. Do NOT include any text before or after the list. Repeat: Output ONLY a valid Python list, e.g. ['file1.py', 'file2.py'].\n"
+                contract_section +
+                "List all files that need to be created or modified to implement the following backend task. Output ONLY a valid Python list of file paths, with NO extra commentary, explanations, or text. Do NOT include any text before or after the list. Repeat: Output ONLY a valid Python list, e.g. ['file1.py', 'file2.py'].\n"
                 f"Task: {task}\n"
                 f"Implementation Plan: {plan}\n"
                 f"Acceptance Criteria: {task.get('acceptance_criteria', '')}\n"
                 f"Relevant Codebase Index: {list(codebase_index.keys())}\n"
             )
         def build_single_file_prompt(task, plan, rules, codebase_index, file_path):
+            # Get current file content if it exists
+            current_content = ""
+            if repo_root and file_path:
+                full_path = os.path.join(repo_root, file_path)
+                if os.path.exists(full_path):
+                    try:
+                        with open(full_path, 'r') as f:
+                            current_content = f.read()
+                    except Exception as e:
+                        self.logger.warning(f"Could not read existing file {full_path}: {e}")
+            
+            # Analyze file structure and patterns
+            file_analysis = ""
+            if current_content:
+                lines = current_content.split('\n')
+                imports = [line.strip() for line in lines if line.strip().startswith(('import ', 'from '))]
+                classes = [line.strip() for line in lines if line.strip().startswith('class ')]
+                functions = [line.strip() for line in lines if line.strip().startswith('def ')]
+                
+                file_analysis = f"""
+CURRENT FILE ANALYSIS:
+- Total lines: {len(lines)}
+- Imports: {len(imports)} found
+- Classes: {len(classes)} found
+- Functions: {len(functions)} found
+- File exists: YES
+
+CURRENT IMPORTS:
+{chr(10).join(imports[:10])}
+
+CURRENT CLASSES:
+{chr(10).join(classes[:5])}
+
+CURRENT FUNCTIONS:
+{chr(10).join(functions[:5])}
+"""
+            else:
+                file_analysis = """
+CURRENT FILE ANALYSIS:
+- File does not exist yet
+- Will create new file with appropriate structure
+"""
+            
+            # Get related files context
+            related_files = []
+            file_dir = os.path.dirname(file_path) if file_path else ""
+            file_name = os.path.basename(file_path) if file_path else ""
+            
+            # Find related files in the same directory and parent directories
+            for indexed_file in codebase_index.keys():
+                if os.path.dirname(indexed_file) == file_dir and indexed_file != file_path:
+                    related_files.append(indexed_file)
+                elif file_dir and indexed_file.startswith(file_dir + '/') and indexed_file != file_path:
+                    related_files.append(indexed_file)
+            
+            # Get project structure context
+            project_structure = []
+            for indexed_file in list(codebase_index.keys())[:20]:  # Limit to first 20 files
+                if indexed_file.startswith('backend/'):
+                    project_structure.append(indexed_file)
+            
+            # Get imports and dependencies context
+            imports_context = ""
+            if current_content:
+                import_lines = [line.strip() for line in current_content.split('\n') if line.strip().startswith('import ') or line.strip().startswith('from ')]
+                if import_lines:
+                    imports_context = f"Current imports:\n" + '\n'.join(import_lines[:10]) + "\n\n"
+            
             return (
-                "You are an expert Python/FastAPI backend developer.\n"
-                "Implement ONLY the code for the file: {file_path}.\n"
-                "If the file already exists, update or extend it as needed.\n"
+                contract_section +
+                self.BASE_PROMPT +
+                f"Implement ONLY the code for the file: {file_path}.\n"
+                "CRITICAL: If the file already exists, analyze the current content and make intelligent, surgical modifications.\n"
+                "DO NOT replace the entire file unless absolutely necessary.\n"
+                "Preserve existing imports, classes, functions, and structure unless they need modification for the task.\n"
+                "Add new functionality by extending existing classes or adding new methods/functions.\n"
                 "The code must be valid, complete, and ready to run.\n"
                 "Do NOT output placeholder code, .txt files, or summaries.\n"
                 "If you cannot generate valid code for this file, return an empty list [].\n"
+                "MODIFICATION STRATEGY:\n"
+                "1. If file exists: Analyze current structure and make minimal changes\n"
+                "2. If adding new functionality: Extend existing classes/methods\n"
+                "3. If modifying existing code: Preserve structure and add/update specific parts\n"
+                "4. If file doesn't exist: Create new file with proper structure\n"
                 "Output format example:\n"
-                "[\n  {\"file\": \"backend/apps/platform_service/api/endpoints/user.py\", \"code\": \"<full Python code here>\"}\n]\n"
+                "[\n  {\"file\": \"backend/apps/platform_service/api/endpoints/auto_backend.py\", \"code\": \"# Example code\"}\n]\n"
                 "Do NOT wrap your output in triple backticks or code fences.\n"
                 f"Task: {task}\n"
                 f"Implementation Plan: {plan}\n"
                 f"Acceptance Criteria: {task.get('acceptance_criteria', '')}\n"
                 f"Target File: {file_path}\n"
+                f"{file_analysis}\n"
+                f"Current File Content:\n{current_content}\n"
+                f"{imports_context}"
+                f"Related Files in Project: {related_files[:10]}\n"
+                f"Project Structure (backend files): {project_structure[:10]}\n"
                 f"Relevant Codebase Context: {codebase_index.get(file_path, {})}\n"
+                f"Codebase Index Keys: {list(codebase_index.keys())[:20]}\n"
             )
-        # --- Add robust list extraction utility ---
-        def extract_python_list(text):
-            """Extract the first Python list from a string using regex, fallback to ast.literal_eval."""
-            import re
-            match = re.search(r'(\[.*?\])', text, re.DOTALL)
-            if match:
-                list_str = match.group(1)
-                try:
-                    return ast.literal_eval(list_str)
-                except Exception:
-                    pass
-            # Fallback: try to parse the whole string
-            try:
-                return ast.literal_eval(text)
-            except Exception:
-                pass
-            return None
-        # 1. Try multi-file output
-        prompt = build_multifile_prompt(task, plan, rules, codebase_index)
-        result_str = developer_tool._run(prompt)
-        logging.info(f"[DeveloperAgent] Multi-file LLM output: {result_str}")
-        code_files = []
-        try:
-            cleaned_result_str = strip_code_fences(result_str)
-            result = eval(cleaned_result_str, {"__builtins__": {}})
-            if isinstance(result, list) and all(isinstance(f, dict) and 'file' in f and 'code' in f for f in result):
-                # Heuristic: check for truncation or excessive length
-                if cleaned_result_str.strip().endswith(']') and len(cleaned_result_str) < 12000:
-                    code_files = result
-                    if code_files:
-                        return code_files
-        except Exception as e:
-            logging.warning(f"[DeveloperAgent] Multi-file output parse error: {e}\nOutput: {result_str}")
-        # 2. Fallback: Two-pass approach
-        logging.info("[DeveloperAgent] Falling back to two-pass approach.")
-        file_list_prompt = build_file_list_prompt(task, plan, rules, codebase_index)
-        file_list_str = developer_tool._run(file_list_prompt)
-        logging.info(f"[DeveloperAgent] File list LLM output: {file_list_str}")
-        try:
-            cleaned_file_list_str = strip_code_fences(file_list_str)
-            file_list = extract_python_list(cleaned_file_list_str)
-            if not isinstance(file_list, list):
-                raise ValueError
-        except Exception as e:
-            logging.error(f"[DeveloperAgent] Error parsing file list: {e}\nOutput: {file_list_str}")
-            raise ValueError("LLM did not return a valid file list for two-pass approach.")
-        code_files = []
-        for file_path in file_list:
-            single_file_prompt = build_single_file_prompt(task, plan, rules, codebase_index, file_path)
-            file_code_str = developer_tool._run(single_file_prompt)
-            logging.info(f"[DeveloperAgent] Single-file LLM output for {file_path}: {file_code_str}")
-            try:
-                cleaned_file_code_str = strip_code_fences(file_code_str)
-                file_result = eval(cleaned_file_code_str, {"__builtins__": {}})
-                if isinstance(file_result, list):
-                    for f in file_result:
-                        if (
-                            isinstance(f, dict)
-                            and f.get('file', '').endswith((".py", ".ts", ".html", ".css", ".scss"))
-                            and f.get('code')
-                            and f['code'].strip()
-                            and not f['file'].endswith('.txt')
-                        ):
-                            code_files.append(f)
-            except Exception as e:
-                logging.warning(f"[DeveloperAgent] Error parsing single-file output for {file_path}: {e}\nOutput: {file_code_str}")
-        if code_files:
-            return code_files
-        else:
-            logging.error(
-                f"[DeveloperAgent] No valid code files generated for task: {task}\n"
-                f"Plan: {plan}\n"
-                f"Rules: {rules}\n"
-                f"Last prompt: {prompt if prompt is not None else '[Not set]'}\n"
-                f"Last LLM output: {result_str if result_str is not None else '[Not set]'}"
-            )
-            raise ValueError("LLM did not return any valid code files for implement_task.\n"
-                             f"Task: {task}\nPlan: {plan}\nPrompt: {prompt if prompt is not None else '[Not set]'}\nOutput: {result_str if result_str is not None else '[Not set]'}")
+        return self.generate_code_with_fallback(
+            task, plan, rules, codebase_index,
+            build_multifile_prompt, build_file_list_prompt, build_single_file_prompt,
+            strip_code_fences, output_validator, step_prefix="developer"
+        )
 
-developer_openai = OpenAIService(deployment=settings.deployment_developer)
-developer_tool = CodeGeneratorTool(developer_openai)
-developer = Agent(
-    role="Developer",
-    goal="Write Angular and Python code for the designed stories.",
-    backstory="A passionate developer who loves clean, production-ready code.",
-    tools=[developer_tool],
-)
+    def escalate_to_frontend(self, reason: str, context: dict = None):
+        """
+        Escalate a task to the frontend agent for UI or integration support.
+        Example usage: self.escalate_to_frontend('Need new UI for new API endpoint', context)
+        """
+        self.escalate(reason, to_agent="frontend", context=context)
 
-if __name__ == "__main__":
-    print("Developer says:", developer_tool.greet()) 
+    def escalate_to_architect_or_pm(self, reason: str, context: dict = None):
+        """
+        Escalate a task to the architect or PM agent for requirements or design clarification.
+        Example usage: self.escalate_to_architect_or_pm('Unclear requirements for backend logic', context)
+        """
+        self.escalate(reason, to_agent="architect/pm", context=context)
+
+    def handle_collaboration_request(self, from_agent: str, context: dict):
+        """
+        Handle a collaboration request from another agent (e.g., frontend, architect, PM).
+        TODO: Implement logic to process incoming requests and update shared context.
+        """
+        self.logger.info(f"[Collaboration] Received request from {from_agent}: {context}")
+        # TODO: Implement actual handling logic
+        pass 

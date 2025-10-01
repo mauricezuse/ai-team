@@ -73,6 +73,7 @@ class OpenAIService:
         else:
             self.deployments = [self.deployment] if self.deployment else []
         self._deployment_cycle = itertools.cycle(self.deployments) if self.deployments else None
+        logging.info(f"[OpenAIService.__init__] Instantiated with deployment: '{self.deployment}' | api_base: '{self.api_base}'")
 
     def _get_next_available_deployment(self):
         if not self._deployment_cycle:
@@ -105,6 +106,9 @@ class OpenAIService:
 
     def generate(self, prompt: str, max_tokens: int = 512, deployment: Optional[str] = None, step: Optional[str] = None) -> str:
         prompt_length = self.count_tokens(prompt)
+        logging.info(f"[OpenAIService] Prompt size: {prompt_length} tokens (max {MAX_PROMPT_TOKENS}) at step '{step}'")
+        if prompt_length > MAX_PROMPT_TOKENS * 0.9:
+            logging.warning(f"[OpenAIService] Prompt size is close to the model's context window: {prompt_length} tokens at step '{step}'")
         if prompt_length > MAX_PROMPT_TOKENS:
             logging.error(f"Prompt too large: {prompt_length} tokens at step '{step}'. Aborting call.")
             # Log to openai_usage.log as well
@@ -118,6 +122,9 @@ class OpenAIService:
             raise PromptTooLargeError(prompt_length, step)
         # Improved load balancing: select next available deployment
         deployment_name = deployment or self._get_next_available_deployment()
+        logging.info(f"[OpenAIService] Using deployment: '{deployment_name}' | api_base: '{self.api_base}' | step: '{step}'")
+        if not deployment_name:
+            logging.warning(f"[OpenAIService] WARNING: No deployment name set for step '{step}'. This may cause requests to go to the wrong model.")
         config = DEPLOYMENT_CONFIG.get(deployment_name, DEPLOYMENT_CONFIG["default"])
         client = openai.AzureOpenAI(
             api_key=self.api_key,
@@ -156,6 +163,7 @@ class OpenAIService:
         max_retries = 6
         delay = 1
         for attempt in range(max_retries):
+            logging.info(f"[OpenAIService] Attempt {attempt+1}/{max_retries} with deployment: {deployment_name} at step '{step}'")
             try:
                 # Cast messages to Any to satisfy type checker for openai SDK
                 if token_param == "max_tokens":
@@ -192,7 +200,19 @@ class OpenAIService:
                     with self._lock:
                         self._rate_limited_until[deployment_name] = time.time() + retry_after
                     logging.warning(f"Deployment {deployment_name} hit rate limit (429). Skipping for {retry_after} seconds.")
-                    # Try next available deployment immediately
+                    # Log all deployments' rate limit status
+                    now = time.time()
+                    statuses = []
+                    for d in self.deployments:
+                        until = self._rate_limited_until.get(d, 0)
+                        status = f"{d}: {'available' if now >= until else f'rate-limited until {until-now:.1f}s'}"
+                        statuses.append(status)
+                    logging.warning(f"[OpenAIService] Deployment statuses after rate limit: {statuses}")
+                    all_limited = all(self._rate_limited_until.get(d, 0) > now for d in self.deployments)
+                    if all_limited:
+                        soonest = min(self._rate_limited_until.get(d, 0) for d in self.deployments)
+                        wait = max(soonest - now, 1)
+                        logging.warning(f"[OpenAIService] All deployments rate-limited. Soonest available in {wait:.1f}s.")
                     deployment_name = self._get_next_available_deployment()
                     config = DEPLOYMENT_CONFIG.get(deployment_name, DEPLOYMENT_CONFIG["default"])
                     client = openai.AzureOpenAI(

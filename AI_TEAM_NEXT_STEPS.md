@@ -77,6 +77,21 @@
 - Ensure no secrets or sensitive data are included in LLM prompts or logs.
 - Run generated code/tests in a sandboxed environment before committing.
 
+# Recent Updates: Enhanced Workflow with PR/Test Automation
+
+## ✅ Completed Features
+- **Enhanced Workflow**: Now persists generated code to `repos/negishi-freelancing` on feature branches
+- **Automatic PR Creation**: Creates pull requests with detailed descriptions of changes and tests
+- **Comprehensive Testing**: Tester agent generates unit, integration, and Playwright tests automatically
+- **Git Operations**: Commits changes incrementally and pushes branches automatically
+- **SSH Configuration**: Fixed SSL issues by switching submodule to SSH remote
+
+## Current Status
+- Enhanced workflow is fully functional with real Jira/GitHub integration
+- All agents (PM, Architect, Developer, Frontend, Reviewer, Tester) are actively engaged
+- Generated code and tests are automatically committed and pushed
+- Pull requests are created with comprehensive change descriptions
+
 # Next Steps: Modular Developer/Frontend Agent Architecture
 
 ## 1. Design a Robust BaseAgent Class
@@ -148,5 +163,72 @@
 - `crewai_app/agents/frontend.py`: New FrontendAgent (Angular) inheriting from BaseAgent, with strict prompt and UI rules.
 - Updated workflow logic for agent routing and collaboration.
 - Tests and documentation.
+
+---
+
+# Implementation Progress Checklist
+
+- [x] Scaffold `BaseAgent` class in `crewai_app/agents/base.py`
+- [x] Refactor `DeveloperAgent` to inherit from `BaseAgent`
+- [x] Create `FrontendAgent` inheriting from `BaseAgent`
+- [x] Implement prompt engineering for frontend/backend agents
+- [x] Add UI consistency rules to frontend prompts
+- [x] Add agent collaboration and escalation logic
+- [ ] Update workflow for agent routing and collaboration (**in progress**)
+- [ ] Add unit/integration tests for agents and base class
+- [ ] Document agent responsibilities, UI rules, and collaboration patterns
+
+---
+
+# Documentation: Agent Responsibilities, UI Rules, and Collaboration Patterns
+
+## Agent Responsibilities
+- **BaseAgent:** Provides LLM interaction, output parsing, error handling, escalation, and shared context utilities for all agents.
+- **DeveloperAgent:** Handles backend (Python/FastAPI) code generation, backend test creation, and collaborates/escalates to frontend or architect/PM as needed.
+- **FrontendAgent:** Handles Angular (Native Federation) code generation, UI/UX implementation, Playwright/Jasmine test creation, and collaborates/escalates to backend or architect/PM as needed.
+
+## UI Consistency Rules (FrontendAgent)
+- Use only the `/freelancer/profile` module for new components.
+- Do **not** upgrade or modify core Angular or federation files.
+- All UI components must:
+  - Use shared styles/components from the shared module.
+  - Follow the design system (color palette, spacing, typography).
+  - Use the same layout, button, and form field styles as existing components.
+  - Be responsive and accessible by default.
+
+## Collaboration & Escalation Patterns
+- Agents can escalate tasks to each other (e.g., backend to frontend, frontend to backend, either to architect/PM) using `escalate_to_*` methods.
+- All escalations and collaboration requests are logged for traceability.
+- Shared context is used to pass API contracts, UI specs, or requirements between agents.
+- If requirements or design are unclear, escalate to architect/PM for clarification.
+
+---
+
+## Running the Workflow
+
+To run the workflow, use the following command from the project root:
+
+```
+python3 -m crewai_app.main --workflow story_implementation --story <STORY_ID> --log-level INFO
+```
+
+This ensures Python treats `crewai_app` as a package and avoids `ModuleNotFoundError: No module named 'crewai_app'`. 
+
+## Next Priority: Integrate Frontend Agent into Workflow
+
+### Improved Plan: Explicit Backend/Frontend Task Breakdown and Routing
+
+1. **Architect/PM Plan:**
+   - Architect/PM should structure the implementation plan with explicit sections for backend and frontend work.
+   - Update the architect/PM prompt to encourage this separation.
+2. **Agent-Specific Task Breakdown:**
+   - After the plan, call `DeveloperAgent.break_down_story` for backend tasks and `FrontendAgent.break_down_story` for frontend tasks, each using the relevant section of the plan.
+   - Store two separate task lists: `backend_tasks` and `frontend_tasks`.
+3. **Parallel Implementation:**
+   - For each backend task, call `DeveloperAgent.implement_task` and commit files.
+   - For each frontend task, call `FrontendAgent.implement_task` and commit files.
+   - Handle testing/review as appropriate for each.
+4. **Logging/Debugging:**
+   - Ensure logs/prints confirm agent execution and LLM usage for both backend and frontend.
 
 --- 
