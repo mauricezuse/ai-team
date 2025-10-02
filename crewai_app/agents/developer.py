@@ -340,3 +340,12 @@ CURRENT FILE ANALYSIS:
         self.logger.info(f"[Collaboration] Received request from {from_agent}: {context}")
         # TODO: Implement actual handling logic
         pass 
+
+# Backward-compatible tool export for legacy workflows expecting `developer_tool`
+# Mirrors the pattern used in `crewai_app/agents/tester.py`
+try:
+    developer_openai = OpenAIService(deployment=settings.deployment_developer)
+    developer_tool = CodeGeneratorTool(developer_openai)
+except Exception as e:
+    # Ensure module import doesn't fail in constrained environments
+    developer_tool = CodeGeneratorTool(OpenAIService(deployment=getattr(settings, 'deployment_developer', None))) 

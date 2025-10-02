@@ -1,9 +1,13 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import argparse
 import sys
 import os
+import json
+import glob
+from datetime import datetime
 from crewai_app.workflows.planning_workflow import run_planning_and_design, generate_stories, gap_analysis
 from crewai_app.workflows.implementation_workflow import implement_stories_with_tests
 from crewai_app.workflows.story_implementation_workflow import StoryImplementationWorkflow
@@ -11,6 +15,15 @@ from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.config import settings
 
 app = FastAPI(title="CrewAI Orchestration Platform")
+
+# Add CORS middleware for frontend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200", "http://localhost:3000"],  # Angular dev server
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health")
 def health_check():
@@ -24,6 +37,11 @@ def list_endpoints():
             {"path": "/generate-stories", "method": "POST", "description": "Generate user stories with story points from design docs."},
             {"path": "/gap-analysis", "method": "POST", "description": "Compare Jira and generated stories, return gap analysis."},
             {"path": "/implement-stories", "method": "POST", "description": "Implement user stories with tests."},
+            {"path": "/workflows", "method": "GET", "description": "List all workflows."},
+            {"path": "/workflows/{workflow_id}", "method": "GET", "description": "Get workflow details and conversations."},
+            {"path": "/workflows/{workflow_id}/execute", "method": "POST", "description": "Execute a workflow."},
+            {"path": "/agents", "method": "GET", "description": "List all agents."},
+            {"path": "/agents/{agent_id}", "method": "GET", "description": "Get agent details."},
             {"path": "/health", "method": "GET", "description": "Health check."}
         ]
     }
@@ -71,6 +89,237 @@ def implement_stories_endpoint(input: ImplementStoriesInput):
 @app.post("/run-workflow")
 def run_workflow():
     return {"message": "Workflow execution not yet implemented."}
+
+# --- New API Endpoints for Frontend ---
+
+@app.get("/workflows")
+def get_workflows():
+    """Get list of all workflows from checkpoint files."""
+    workflows = []
+    checkpoint_dir = "workflow_results"
+    
+    if os.path.exists(checkpoint_dir):
+        for file_path in glob.glob(os.path.join(checkpoint_dir, "*.json")):
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                
+                workflow_id = os.path.basename(file_path).replace('.json', '').replace('_checkpoint', '')
+                workflow_name = workflow_id.replace('_', ' ').title()
+                
+                # Handle different data structures - some files might have lists instead of dicts
+                workflow_log = data.get('workflow_log', [])
+                if isinstance(workflow_log, list) and len(workflow_log) > 0:
+                    # Check if it's a list of dicts or just a list
+                    if isinstance(workflow_log[0], dict):
+                        status = "completed" if len(workflow_log) > 0 else "pending"
+                    else:
+                        status = "completed" if len(workflow_log) > 0 else "pending"
+                else:
+                    status = "pending"
+                
+                # Extract agents from workflow log
+                agents = []
+                if isinstance(workflow_log, list) and len(workflow_log) > 0:
+                    for entry in workflow_log:
+                        if isinstance(entry, dict) and 'agent' in entry:
+                            agents.append(entry['agent'])
+                
+                workflows.append({
+                    "id": workflow_id,
+                    "name": workflow_name,
+                    "status": status,
+                    "agents": list(set(agents)),
+                    "created_at": data.get('timestamp', ''),
+                    "last_step": workflow_log[-1].get('step', '') if isinstance(workflow_log, list) and len(workflow_log) > 0 and isinstance(workflow_log[-1], dict) else ''
+                })
+            except Exception as e:
+                print(f"Error reading workflow file {file_path}: {e}")
+    
+    return workflows
+
+@app.get("/workflows/{workflow_id}")
+def get_workflow(workflow_id: str):
+    """Get detailed workflow information including agent conversations."""
+    checkpoint_file = f"workflow_results/{workflow_id}_checkpoint.json"
+    
+    if not os.path.exists(checkpoint_file):
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    try:
+        with open(checkpoint_file, 'r') as f:
+            data = json.load(f)
+        
+        # Extract agent conversations from workflow log
+        conversations = []
+        workflow_log = data.get('workflow_log', [])
+        if isinstance(workflow_log, list):
+            for entry in workflow_log:
+                if isinstance(entry, dict):
+                    conversation = {
+                        "step": entry.get('step', ''),
+                        "timestamp": entry.get('timestamp', ''),
+                        "agent": entry.get('agent', ''),
+                        "status": entry.get('status', ''),
+                        "details": entry.get('details', ''),
+                        "output": entry.get('output', ''),
+                        "code_files": entry.get('code_files', []),
+                        "escalations": entry.get('escalations', []),
+                        "collaborations": entry.get('collaborations', [])
+                    }
+                    conversations.append(conversation)
+        
+        return {
+            "id": workflow_id,
+            "name": workflow_id.replace('_', ' ').title(),
+            "status": "completed" if conversations else "pending",
+            "conversations": conversations,
+            "created_at": data.get('timestamp', ''),
+            "collaboration_queue": data.get('collaboration_queue', []),
+            "escalation_queue": data.get('escalation_queue', [])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading workflow: {str(e)}")
+
+@app.post("/workflows/{workflow_id}/execute")
+def execute_workflow(workflow_id: str, story_id: Optional[str] = None):
+    """Execute a workflow (enhanced story workflow)."""
+    try:
+        # Use the story_id from the workflow_id or provided parameter
+        if not story_id:
+            # Extract story ID from workflow_id (e.g., "enhanced_story_NEGISHI-178" -> "NEGISHI-178")
+            if "NEGISHI-" in workflow_id:
+                story_id = workflow_id.split("NEGISHI-")[1].split("_")[0]
+                story_id = f"NEGISHI-{story_id}"
+            else:
+                story_id = "NEGISHI-178"  # Default fallback
+        
+        # Create and run enhanced workflow
+        workflow = EnhancedStoryWorkflow(
+            story_id=story_id,
+            use_real_jira=True,
+            use_real_github=True
+        )
+        
+        results = workflow.run()
+        
+        return {
+            "workflow_id": workflow_id,
+            "story_id": story_id,
+            "status": "completed",
+            "results": results,
+            "message": f"Workflow executed successfully for story {story_id}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error executing workflow: {str(e)}")
+
+@app.get("/agents")
+def get_agents():
+    """Get list of all available agents."""
+    agents = [
+        {
+            "id": "pm",
+            "name": "Product Manager",
+            "role": "Product Management",
+            "goal": "Define product requirements and user stories",
+            "backstory": "Experienced product manager with deep understanding of user needs"
+        },
+        {
+            "id": "architect",
+            "name": "Solution Architect", 
+            "role": "Architecture",
+            "goal": "Design system architecture and technical solutions",
+            "backstory": "Senior architect with expertise in scalable system design"
+        },
+        {
+            "id": "developer",
+            "name": "Backend Developer",
+            "role": "Backend Development",
+            "goal": "Implement backend services and APIs",
+            "backstory": "Full-stack developer specializing in Python and FastAPI"
+        },
+        {
+            "id": "frontend",
+            "name": "Frontend Developer",
+            "role": "Frontend Development", 
+            "goal": "Implement user interfaces and frontend components",
+            "backstory": "Angular specialist with expertise in modern web frameworks"
+        },
+        {
+            "id": "tester",
+            "name": "QA Tester",
+            "role": "Quality Assurance",
+            "goal": "Ensure code quality through comprehensive testing",
+            "backstory": "QA engineer with expertise in automated testing and quality assurance"
+        },
+        {
+            "id": "reviewer",
+            "name": "Code Reviewer",
+            "role": "Code Review",
+            "goal": "Review code for quality, security, and best practices",
+            "backstory": "Senior developer with keen eye for code quality and security"
+        }
+    ]
+    return agents
+
+@app.get("/agents/{agent_id}")
+def get_agent(agent_id: str):
+    """Get detailed information about a specific agent."""
+    agents = {
+        "pm": {
+            "id": "pm",
+            "name": "Product Manager",
+            "role": "Product Management",
+            "goal": "Define product requirements and user stories",
+            "backstory": "Experienced product manager with deep understanding of user needs",
+            "capabilities": ["Requirements analysis", "User story creation", "Stakeholder communication"]
+        },
+        "architect": {
+            "id": "architect", 
+            "name": "Solution Architect",
+            "role": "Architecture",
+            "goal": "Design system architecture and technical solutions",
+            "backstory": "Senior architect with expertise in scalable system design",
+            "capabilities": ["System design", "Technology selection", "API design", "Database design"]
+        },
+        "developer": {
+            "id": "developer",
+            "name": "Backend Developer", 
+            "role": "Backend Development",
+            "goal": "Implement backend services and APIs",
+            "backstory": "Full-stack developer specializing in Python and FastAPI",
+            "capabilities": ["Python development", "FastAPI", "Database integration", "API implementation"]
+        },
+        "frontend": {
+            "id": "frontend",
+            "name": "Frontend Developer",
+            "role": "Frontend Development",
+            "goal": "Implement user interfaces and frontend components", 
+            "backstory": "Angular specialist with expertise in modern web frameworks",
+            "capabilities": ["Angular development", "TypeScript", "HTML/CSS", "UI/UX implementation"]
+        },
+        "tester": {
+            "id": "tester",
+            "name": "QA Tester",
+            "role": "Quality Assurance", 
+            "goal": "Ensure code quality through comprehensive testing",
+            "backstory": "QA engineer with expertise in automated testing and quality assurance",
+            "capabilities": ["Unit testing", "Integration testing", "Playwright testing", "Test automation"]
+        },
+        "reviewer": {
+            "id": "reviewer",
+            "name": "Code Reviewer",
+            "role": "Code Review",
+            "goal": "Review code for quality, security, and best practices",
+            "backstory": "Senior developer with keen eye for code quality and security",
+            "capabilities": ["Code review", "Security analysis", "Performance optimization", "Best practices"]
+        }
+    }
+    
+    if agent_id not in agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    
+    return agents[agent_id]
 
 def run_story_implementation_workflow(story_id: str, use_real_jira: bool = True, use_real_github: bool = True, 
                                     codebase_root: Optional[str] = None, user_intervention_mode: bool = False,
