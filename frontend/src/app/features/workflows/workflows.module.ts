@@ -8,6 +8,8 @@ import { WorkflowDetailComponent } from './workflow-detail.component';
   declarations: [],
   imports: [
     CommonModule,
+    WorkflowsListComponent,
+    WorkflowDetailComponent,
     RouterModule.forChild([
       { path: '', component: WorkflowsListComponent },
       { path: ':id', component: WorkflowDetailComponent }
