@@ -423,8 +423,8 @@ p, span, div, a, li, td, th {
   }
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
+/* DISABLED: Dark mode support - Force light mode only */
+/* @media (prefers-color-scheme: dark) {
   :root {
     --surface-0: #0f172a;
     --surface-50: #1e293b;
@@ -441,4 +441,22 @@ p, span, div, a, li, td, th {
     --text-color-secondary: #cbd5e1;
     --border-color: #334155;
   }
+} */
+
+/* Force light mode always */
+:root {
+  --surface-0: #ffffff !important;
+  --surface-50: #f8fafc !important;
+  --surface-100: #f1f5f9 !important;
+  --surface-200: #e2e8f0 !important;
+  --surface-300: #cbd5e1 !important;
+  --surface-400: #94a3b8 !important;
+  --surface-500: #64748b !important;
+  --surface-600: #475569 !important;
+  --surface-700: #334155 !important;
+  --surface-800: #1e293b !important;
+  --surface-900: #0f172a !important;
+  --text-color: #1e293b !important;
+  --text-color-secondary: #64748b !important;
+  --border-color: #e2e8f0 !important;
 }

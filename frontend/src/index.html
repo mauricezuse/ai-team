@@ -23,6 +23,30 @@
       allElements.forEach(el => {
         el.style.setProperty('color', '#1e293b', 'important');
       });
+      
+      // Prevent dark mode switching
+      document.documentElement.style.setProperty('color-scheme', 'light', 'important');
+      document.body.style.setProperty('color-scheme', 'light', 'important');
+    });
+    
+    // Monitor for any dynamic style changes and override them
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          const target = mutation.target;
+          if (target.style.color !== '#1e293b') {
+            target.style.setProperty('color', '#1e293b', 'important');
+          }
+        }
+      });
+    });
+    
+    document.addEventListener('DOMContentLoaded', function() {
+      observer.observe(document.body, { 
+        attributes: true, 
+        attributeFilter: ['style'],
+        subtree: true 
+      });
     });
   </script>
 </head>
