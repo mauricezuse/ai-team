@@ -126,8 +126,8 @@ export class WorkflowDetailComponent implements OnInit {
   }
 
   getFileUrl(filename: string): string {
-    // For now, return a placeholder URL. In a real implementation, this would
-    // point to the actual file location in your file system or repository
-    return `https://github.com/your-org/ai-team/blob/main/generated-files/${filename}`;
+    // Point to the actual cloned repository where files are generated
+    // The workflow clones the negishi-freelancing repository and generates files there
+    return `https://github.com/mauricezuse/negishi-freelancing/blob/main/${filename}`;
   }
 }
