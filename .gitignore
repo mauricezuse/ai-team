@@ -29,3 +29,17 @@ Thumbs.db
 codebase_index_cache.json
 workflow_results
 jira-openapi.json
+# Local/project caches and generated
+venv/
+.reports/
+playwright-report/
+frontend/playwright-report/
+frontend/test-results/
+test-results/
+coverage/
+.pytest_cache/
+.angular/
+frontend/dist/
+workflow_results/
+logs/
+repos/
