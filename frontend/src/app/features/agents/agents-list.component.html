@@ -1,9 +1,9 @@
-<div class="agents-container">
-  <div class="agents-header">
+<div class="card">
+  <div class="card-header">
     <h2>Agents</h2>
     <div class="agents-actions">
       <button pButton type="button" label="Refresh" icon="pi pi-refresh" (click)="loadAgents()" 
-              [attr.data-testid]="'refresh-button'"></button>
+              [attr.data-testid]="'refresh-button'" class="p-button-outlined"></button>
       <button pButton type="button" label="Add Agent" icon="pi pi-plus" (click)="showAddDialog()"
               [attr.data-testid]="'add-agent-button'"></button>
     </div>

@@ -1,10 +1,11 @@
-<div *ngIf="workflow">
-  <div class="workflow-header">
+<div *ngIf="workflow" class="card">
+  <div class="card-header">
     <h2 data-testid="workflow-title">{{ workflow.name }}</h2>
     <div class="workflow-actions">
       <button pButton type="button" label="Execute" icon="pi pi-play" (click)="executeWorkflow()" 
               [disabled]="workflow.status === 'running'" class="p-button-success" data-testid="execute-button"></button>
-      <button pButton type="button" label="Refresh" icon="pi pi-refresh" (click)="refreshWorkflow()" data-testid="refresh-button"></button>
+      <button pButton type="button" label="Refresh" icon="pi pi-refresh" (click)="refreshWorkflow()" 
+              data-testid="refresh-button" class="p-button-outlined"></button>
     </div>
   </div>
   

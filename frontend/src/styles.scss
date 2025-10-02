@@ -1,1 +1,316 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global styles for modern minimalistic design */
+@import 'primeng/resources/themes/lara-light-blue/theme.css';
+@import 'primeng/resources/primeng.css';
+@import 'primeicons/primeicons.css';
+
+/* Modern minimalistic color scheme */
+:root {
+  --primary-color: #2563eb;
+  --primary-color-text: #ffffff;
+  --surface-0: #ffffff;
+  --surface-50: #f8fafc;
+  --surface-100: #f1f5f9;
+  --surface-200: #e2e8f0;
+  --surface-300: #cbd5e1;
+  --surface-400: #94a3b8;
+  --surface-500: #64748b;
+  --surface-600: #475569;
+  --surface-700: #334155;
+  --surface-800: #1e293b;
+  --surface-900: #0f172a;
+  --text-color: #1e293b;
+  --text-color-secondary: #64748b;
+  --border-color: #e2e8f0;
+  --content-padding: 1.5rem;
+  --border-radius: 0.5rem;
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+/* Global reset and base styles */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-color);
+  background-color: var(--surface-50);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Layout components */
+.app-container {
+  min-height: 100vh;
+  background-color: var(--surface-50);
+}
+
+.app-header {
+  background-color: var(--surface-0);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow);
+  padding: 1rem var(--content-padding);
+  
+  .app-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0;
+  }
+}
+
+.app-content {
+  padding: var(--content-padding);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Navigation */
+.nav-menu {
+  background-color: var(--surface-0);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 var(--content-padding);
+  
+  .p-menubar {
+    background: transparent;
+    border: none;
+    padding: 0;
+    
+    .p-menubar-root-list {
+      .p-menuitem {
+        .p-menuitem-link {
+          color: var(--text-color);
+          padding: 1rem;
+          border-radius: var(--border-radius);
+          transition: all 0.2s ease;
+          
+          &:hover {
+            background-color: var(--surface-100);
+            color: var(--primary-color);
+          }
+          
+          &.p-menuitem-link-active {
+            background-color: var(--primary-color);
+            color: var(--primary-color-text);
+          }
+        }
+      }
+    }
+  }
+}
+
+/* Cards and surfaces */
+.card {
+  background-color: var(--surface-0);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    
+    h2, h3 {
+      margin: 0;
+      color: var(--text-color);
+      font-weight: 600;
+    }
+  }
+}
+
+/* Tables */
+:host ::ng-deep {
+  .p-datatable {
+    background-color: var(--surface-0);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    
+    .p-datatable-header {
+      background-color: var(--surface-50);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem;
+    }
+    
+    .p-datatable-thead > tr > th {
+      background-color: var(--surface-50);
+      color: var(--text-color);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem;
+    }
+    
+    .p-datatable-tbody > tr {
+      border-bottom: 1px solid var(--border-color);
+      
+      &:hover {
+        background-color: var(--surface-50);
+      }
+      
+      > td {
+        padding: 1rem;
+        color: var(--text-color);
+      }
+    }
+  }
+  
+  .p-button {
+    border-radius: var(--border-radius);
+    font-weight: 500;
+    transition: all 0.2s ease;
+    
+    &.p-button-sm {
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+    }
+    
+    &.p-button-outlined {
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      background: transparent;
+      
+      &:hover {
+        background-color: var(--surface-100);
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+      }
+    }
+    
+    &.p-button-success {
+      background-color: #10b981;
+      border-color: #10b981;
+      
+      &:hover {
+        background-color: #059669;
+        border-color: #047857;
+      }
+    }
+    
+    &.p-button-danger {
+      background-color: #ef4444;
+      border-color: #ef4444;
+      
+      &:hover {
+        background-color: #dc2626;
+        border-color: #b91c1c;
+      }
+    }
+  }
+  
+  .p-inputtext {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 0.75rem;
+    color: var(--text-color);
+    background-color: var(--surface-0);
+    
+    &:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+    }
+  }
+  
+  .p-dropdown {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    
+    .p-dropdown-label {
+      color: var(--text-color);
+      padding: 0.75rem;
+    }
+  }
+}
+
+/* Status indicators */
+.status-completed {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.status-pending {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.status-running {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.status-error {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* Empty states */
+.no-workflows, .error-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-color-secondary);
+  
+  p {
+    font-size: 1.125rem;
+    margin: 0;
+  }
+}
+
+/* Loading states */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  color: var(--text-color-secondary);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .app-content {
+    padding: 1rem;
+  }
+  
+  .card {
+    padding: 1rem;
+  }
+  
+  :host ::ng-deep {
+    .p-datatable {
+      .p-datatable-tbody > tr > td {
+        padding: 0.75rem 0.5rem;
+        font-size: 0.875rem;
+      }
+    }
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-0: #0f172a;
+    --surface-50: #1e293b;
+    --surface-100: #334155;
+    --surface-200: #475569;
+    --surface-300: #64748b;
+    --surface-400: #94a3b8;
+    --surface-500: #cbd5e1;
+    --surface-600: #e2e8f0;
+    --surface-700: #f1f5f9;
+    --surface-800: #f8fafc;
+    --surface-900: #ffffff;
+    --text-color: #f8fafc;
+    --text-color-secondary: #cbd5e1;
+    --border-color: #334155;
+  }
+}
