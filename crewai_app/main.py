@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Body, HTTPException
+from fastapi import FastAPI, Body, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from sqlalchemy.orm import Session
 import argparse
 import sys
 import os
@@ -13,8 +14,14 @@ from crewai_app.workflows.implementation_workflow import implement_stories_with_
 from crewai_app.workflows.story_implementation_workflow import StoryImplementationWorkflow
 from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.config import settings
+from crewai_app.database import get_db, init_database, Workflow, Conversation, CodeFile, Escalation, Collaboration
 
 app = FastAPI(title="CrewAI Orchestration Platform")
+
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    init_database()
 
 # Add CORS middleware for frontend communication
 app.add_middleware(
@@ -25,9 +32,196 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Pydantic models for API
+class WorkflowCreate(BaseModel):
+    jira_story_id: str
+    jira_story_title: str
+    jira_story_description: str
+    repository_url: str = "https://github.com/mauricezuse/negishi-freelancing"
+    target_branch: str = "main"
+
+class WorkflowResponse(BaseModel):
+    id: int
+    name: str
+    jira_story_id: str
+    jira_story_title: str
+    jira_story_description: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    repository_url: str
+    target_branch: str
+    conversations: List[Dict] = []
+    code_files: List[Dict] = []
+
+    class Config:
+        from_attributes = True
+
+class ConversationResponse(BaseModel):
+    id: int
+    step: str
+    timestamp: datetime
+    agent: str
+    status: str
+    details: Optional[str]
+    output: Optional[str]
+    prompt: Optional[str]
+    code_files: List[Dict] = []
+    escalations: List[Dict] = []
+    collaborations: List[Dict] = []
+
+    class Config:
+        from_attributes = True
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+# New workflow management endpoints
+@app.get("/workflows", response_model=List[WorkflowResponse])
+def get_workflows(db: Session = Depends(get_db)):
+    """Get all workflows"""
+    workflows = db.query(Workflow).all()
+    return workflows
+
+@app.get("/workflows/{workflow_id}", response_model=WorkflowResponse)
+def get_workflow(workflow_id: int, db: Session = Depends(get_db)):
+    """Get a specific workflow with all its data"""
+    workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    # Get conversations with related data
+    conversations = db.query(Conversation).filter(Conversation.workflow_id == workflow_id).all()
+    workflow_data = {
+        "id": workflow.id,
+        "name": workflow.name,
+        "jira_story_id": workflow.jira_story_id,
+        "jira_story_title": workflow.jira_story_title,
+        "jira_story_description": workflow.jira_story_description,
+        "status": workflow.status,
+        "created_at": workflow.created_at,
+        "updated_at": workflow.updated_at,
+        "repository_url": workflow.repository_url,
+        "target_branch": workflow.target_branch,
+        "conversations": []
+    }
+    
+    for conv in conversations:
+        # Get code files for this conversation
+        code_files = db.query(CodeFile).filter(CodeFile.conversation_id == conv.id).all()
+        # Get escalations and collaborations
+        escalations = db.query(Escalation).filter(Escalation.conversation_id == conv.id).all()
+        collaborations = db.query(Collaboration).filter(Collaboration.conversation_id == conv.id).all()
+        
+        conv_data = {
+            "id": conv.id,
+            "step": conv.step,
+            "timestamp": conv.timestamp,
+            "agent": conv.agent,
+            "status": conv.status,
+            "details": conv.details,
+            "output": conv.output,
+            "prompt": conv.prompt,
+            "code_files": [{"filename": cf.filename, "file_path": cf.file_path} for cf in code_files],
+            "escalations": [{"from_agent": e.from_agent, "to_agent": e.to_agent, "reason": e.reason, "status": e.status} for e in escalations],
+            "collaborations": [{"from_agent": c.from_agent, "to_agent": c.to_agent, "request_type": c.request_type, "status": c.status} for c in collaborations]
+        }
+        workflow_data["conversations"].append(conv_data)
+    
+    return workflow_data
+
+@app.post("/workflows", response_model=WorkflowResponse)
+def create_workflow(workflow_data: WorkflowCreate, db: Session = Depends(get_db)):
+    """Create a new workflow from a Jira story"""
+    # Check if workflow already exists
+    existing = db.query(Workflow).filter(Workflow.jira_story_id == workflow_data.jira_story_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Workflow for this Jira story already exists")
+    
+    # Create new workflow
+    workflow = Workflow(
+        name=f"{workflow_data.jira_story_id}: {workflow_data.jira_story_title}",
+        jira_story_id=workflow_data.jira_story_id,
+        jira_story_title=workflow_data.jira_story_title,
+        jira_story_description=workflow_data.jira_story_description,
+        repository_url=workflow_data.repository_url,
+        target_branch=workflow_data.target_branch,
+        status="pending"
+    )
+    
+    db.add(workflow)
+    db.commit()
+    db.refresh(workflow)
+    
+    return workflow
+
+@app.post("/workflows/{workflow_id}/execute")
+def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
+    """Execute a workflow - this will run the AI agents"""
+    workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    # Update workflow status
+    workflow.status = "running"
+    db.commit()
+    
+    try:
+        # Here you would integrate with your existing workflow execution
+        # For now, we'll create some sample conversation data
+        sample_conversations = [
+            {
+                "step": "story_analysis",
+                "agent": "pm",
+                "status": "completed",
+                "details": f"Analyzed {workflow.jira_story_id} story requirements",
+                "output": f"Story analysis complete. Identified key requirements for {workflow.jira_story_title}.",
+                "prompt": f"As a Product Manager, analyze the {workflow.jira_story_id} story: '{workflow.jira_story_title}'. Break down the requirements, identify stakeholders, and create user stories for this feature."
+            },
+            {
+                "step": "architecture_design",
+                "agent": "architect",
+                "status": "completed",
+                "details": f"Designed system architecture for {workflow.jira_story_title}",
+                "output": f"Architecture design complete. Proposed system architecture for {workflow.jira_story_title}.",
+                "prompt": f"As a System Architect, design a scalable architecture for {workflow.jira_story_title}. Consider system design, API design, data flow, security, and integration patterns."
+            }
+        ]
+        
+        for conv_data in sample_conversations:
+            conversation = Conversation(
+                workflow_id=workflow_id,
+                step=conv_data["step"],
+                agent=conv_data["agent"],
+                status=conv_data["status"],
+                details=conv_data["details"],
+                output=conv_data["output"],
+                prompt=conv_data["prompt"]
+            )
+            db.add(conversation)
+        
+        workflow.status = "completed"
+        db.commit()
+        
+        return {"message": "Workflow executed successfully", "workflow_id": workflow_id}
+        
+    except Exception as e:
+        workflow.status = "error"
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Error executing workflow: {str(e)}")
+
+@app.get("/agents")
+def get_agents():
+    """Get available agents"""
+    return [
+        {"id": "pm", "name": "Product Manager", "role": "Requirements analysis and user story creation"},
+        {"id": "architect", "name": "System Architect", "role": "System design and architecture"},
+        {"id": "developer", "name": "Backend Developer", "role": "Backend implementation and APIs"},
+        {"id": "frontend", "name": "Frontend Developer", "role": "Frontend implementation and UI"},
+        {"id": "tester", "name": "QA Tester", "role": "Testing and quality assurance"},
+        {"id": "reviewer", "name": "Code Reviewer", "role": "Code review and quality standards"}
+    ]
 
 @app.get("/")
 def list_endpoints():

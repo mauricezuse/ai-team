@@ -33,4 +33,8 @@ export class WorkflowService {
   executeWorkflow(id: string, storyId?: string): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/${id}/execute`, { story_id: storyId });
   }
+
+  createWorkflow(workflowData: any): Observable<any> {
+    return this.http.post<any>(this.apiUrl, workflowData);
+  }
 }

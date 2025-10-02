@@ -141,4 +141,8 @@ export class WorkflowsListComponent implements OnInit {
       }
     });
   }
+
+  createWorkflow() {
+    this.router.navigate(['/workflows/create']);
+  }
 }
