@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class WorkflowService {
-  private apiUrl = '/api/workflows';
+  private apiUrl = '/workflows';
 
   constructor(private http: HttpClient) {}
 
@@ -28,5 +28,9 @@ export class WorkflowService {
 
   getWorkflow(id: string): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/${id}`);
+  }
+
+  executeWorkflow(id: string, storyId?: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/${id}/execute`, { story_id: storyId });
   }
 }
