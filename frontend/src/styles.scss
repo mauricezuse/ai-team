@@ -1,6 +1,16 @@
 /* Global styles for modern minimalistic design */
 /* PrimeNG styles are imported via angular.json */
 
+/* CRITICAL: Force all text to be dark and visible */
+* {
+  color: #1e293b !important;
+}
+
+body, html {
+  color: #1e293b !important;
+  background-color: #f8fafc !important;
+}
+
 /* Modern minimalistic color scheme */
 :root {
   --primary-color: #2563eb;
@@ -64,6 +74,26 @@ p, span, div, a, li, td, th {
   
   .p-component {
     color: var(--text-color) !important;
+  }
+  
+  /* Force all text to be dark */
+  body, html, div, span, p, h1, h2, h3, h4, h5, h6, a, li, td, th, button, input, select, textarea {
+    color: #1e293b !important;
+  }
+  
+  /* Override any white text */
+  .p-datatable, .p-menubar, .p-button, .p-inputtext, .p-dropdown {
+    color: #1e293b !important;
+  }
+  
+  /* Ensure table content is visible */
+  .p-datatable-tbody tr td {
+    color: #1e293b !important;
+  }
+  
+  /* Ensure menu items are visible */
+  .p-menubar .p-menuitem-link {
+    color: #1e293b !important;
   }
 }
 
