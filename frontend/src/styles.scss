@@ -1,14 +1,33 @@
 /* Global styles for modern minimalistic design */
 /* PrimeNG styles are imported via angular.json */
 
-/* CRITICAL: Force all text to be dark and visible */
+/* NUCLEAR OPTION: Force ALL text to be dark and visible */
 * {
+  color: #1e293b !important;
+  background-color: transparent !important;
+}
+
+*:before, *:after {
   color: #1e293b !important;
 }
 
 body, html {
   color: #1e293b !important;
   background-color: #f8fafc !important;
+}
+
+/* Override any white text with maximum specificity */
+html * {
+  color: #1e293b !important;
+}
+
+html body * {
+  color: #1e293b !important;
+}
+
+/* Force all text elements */
+p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, button, input, select, textarea, label {
+  color: #1e293b !important;
 }
 
 /* Modern minimalistic color scheme */
