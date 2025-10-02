@@ -68,4 +68,10 @@ export default defineConfig({
     url: 'http://localhost:4200',
     reuseExistingServer: false,
   },
+
+  /* Test timeout for database operations */
+  timeout: 30000,
+
+  /* Global setup for database tests */
+  globalSetup: require.resolve('./global-setup.ts'),
 });
