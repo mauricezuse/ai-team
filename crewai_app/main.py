@@ -158,7 +158,7 @@ def create_workflow(workflow_data: WorkflowCreate, db: Session = Depends(get_db)
 
 @app.post("/workflows/{workflow_id}/execute")
 def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
-    """Execute a workflow - this will run the AI agents"""
+    """Execute a workflow using the existing EnhancedStoryWorkflow system"""
     workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -168,48 +168,131 @@ def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     try:
-        # Here you would integrate with your existing workflow execution
-        # For now, we'll create some sample conversation data
-        sample_conversations = [
-            {
-                "step": "story_analysis",
-                "agent": "pm",
-                "status": "completed",
-                "details": f"Analyzed {workflow.jira_story_id} story requirements",
-                "output": f"Story analysis complete. Identified key requirements for {workflow.jira_story_title}.",
-                "prompt": f"As a Product Manager, analyze the {workflow.jira_story_id} story: '{workflow.jira_story_title}'. Break down the requirements, identify stakeholders, and create user stories for this feature."
-            },
-            {
-                "step": "architecture_design",
-                "agent": "architect",
-                "status": "completed",
-                "details": f"Designed system architecture for {workflow.jira_story_title}",
-                "output": f"Architecture design complete. Proposed system architecture for {workflow.jira_story_title}.",
-                "prompt": f"As a System Architect, design a scalable architecture for {workflow.jira_story_title}. Consider system design, API design, data flow, security, and integration patterns."
-            }
-        ]
+        # Use the existing EnhancedStoryWorkflow system
+        from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
         
-        for conv_data in sample_conversations:
-            conversation = Conversation(
-                workflow_id=workflow_id,
-                step=conv_data["step"],
-                agent=conv_data["agent"],
-                status=conv_data["status"],
-                details=conv_data["details"],
-                output=conv_data["output"],
-                prompt=conv_data["prompt"]
-            )
-            db.add(conversation)
+        # Create and run the enhanced workflow
+        enhanced_workflow = EnhancedStoryWorkflow(
+            story_id=workflow.jira_story_id,
+            use_real_jira=True,
+            use_real_github=True
+        )
+        
+        # Run the workflow and get results
+        results = enhanced_workflow.run()
+        
+        # Store the workflow log in the database
+        if hasattr(enhanced_workflow, 'workflow_log') and enhanced_workflow.workflow_log:
+            for log_entry in enhanced_workflow.workflow_log:
+                conversation = Conversation(
+                    workflow_id=workflow_id,
+                    step=log_entry.get('step', 'unknown'),
+                    agent=log_entry.get('agent', 'unknown'),
+                    status=log_entry.get('status', 'completed'),
+                    details=log_entry.get('details', ''),
+                    output=log_entry.get('output', ''),
+                    prompt=log_entry.get('prompt', '')
+                )
+                db.add(conversation)
+                
+                # Store code files if they exist
+                if 'code_files' in log_entry and log_entry['code_files']:
+                    for file_path in log_entry['code_files']:
+                        code_file = CodeFile(
+                            workflow_id=workflow_id,
+                            conversation_id=conversation.id,
+                            filename=file_path.split('/')[-1],
+                            file_path=file_path,
+                            file_type='generated'
+                        )
+                        db.add(code_file)
         
         workflow.status = "completed"
         db.commit()
         
-        return {"message": "Workflow executed successfully", "workflow_id": workflow_id}
+        return {
+            "message": "Workflow executed successfully", 
+            "workflow_id": workflow_id,
+            "story_id": workflow.jira_story_id,
+            "results_count": len(results) if results else 0
+        }
         
     except Exception as e:
         workflow.status = "error"
         db.commit()
         raise HTTPException(status_code=500, detail=f"Error executing workflow: {str(e)}")
+
+@app.post("/workflows/from-jira/{story_id}")
+def create_workflow_from_jira(story_id: str, db: Session = Depends(get_db)):
+    """Create a workflow from an existing Jira story"""
+    try:
+        # Check if workflow already exists
+        existing = db.query(Workflow).filter(Workflow.jira_story_id == story_id).first()
+        if existing:
+            return {"message": f"Workflow for {story_id} already exists", "workflow_id": existing.id}
+        
+        # Pull story details from Jira
+        from crewai_app.services.jira_service import JiraService
+        jira_service = JiraService(use_real=True)
+        story_data = jira_service.get_story(story_id)
+        
+        if not story_data:
+            raise HTTPException(status_code=404, detail=f"Could not retrieve story {story_id} from Jira")
+        
+        # Extract story details
+        fields = story_data.get('fields', {})
+        title = fields.get('summary', f'Story {story_id}')
+        description = fields.get('description', '')
+        
+        # Convert ADF description to plain text if needed
+        if isinstance(description, dict):
+            description = _extract_text_from_adf(description)
+        
+        # Create workflow
+        workflow = Workflow(
+            name=f"{story_id}: {title}",
+            jira_story_id=story_id,
+            jira_story_title=title,
+            jira_story_description=description,
+            repository_url="https://github.com/mauricezuse/negishi-freelancing",
+            target_branch="main",
+            status="pending"
+        )
+        
+        db.add(workflow)
+        db.commit()
+        db.refresh(workflow)
+        
+        return {
+            "message": f"Workflow created successfully for {story_id}",
+            "workflow_id": workflow.id,
+            "story_id": story_id,
+            "title": title
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating workflow from Jira: {str(e)}")
+
+def _extract_text_from_adf(adf_doc):
+    """Extract plain text from Atlassian Document Format"""
+    if not isinstance(adf_doc, dict):
+        return str(adf_doc)
+    
+    text_parts = []
+    
+    def extract_from_content(content):
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict):
+                    if item.get('type') == 'text':
+                        text_parts.append(item.get('text', ''))
+                    elif 'content' in item:
+                        extract_from_content(item['content'])
+    
+    if 'content' in adf_doc:
+        extract_from_content(adf_doc['content'])
+    
+    return ' '.join(text_parts).strip()
 
 @app.get("/agents")
 def get_agents():

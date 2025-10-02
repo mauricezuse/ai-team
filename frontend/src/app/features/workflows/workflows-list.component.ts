@@ -145,4 +145,30 @@ export class WorkflowsListComponent implements OnInit {
   createWorkflow() {
     this.router.navigate(['/workflows/create']);
   }
+
+  createFromJira() {
+    const storyId = prompt('Enter Jira Story ID (e.g., NEGISHI-123):');
+    if (storyId && storyId.trim()) {
+      this.loading = true;
+      this.workflowService.createWorkflowFromJira(storyId.trim()).subscribe({
+        next: (response) => {
+          this.loading = false;
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Success',
+            detail: response.message
+          });
+          this.loadWorkflows(); // Refresh the list
+        },
+        error: (error) => {
+          this.loading = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: error.error?.detail || 'Failed to create workflow from Jira'
+          });
+        }
+      });
+    }
+  }
 }
