@@ -52,6 +52,13 @@
         </div>
         
         <div *ngIf="conversation.expanded" class="conversation-details">
+          <div *ngIf="conversation.prompt" class="conversation-prompt">
+            <strong>Agent Prompt:</strong>
+            <div class="prompt-content">
+              <pre>{{ conversation.prompt }}</pre>
+            </div>
+          </div>
+          
           <div *ngIf="conversation.details" class="conversation-details-text">
             <strong>Details:</strong> {{ conversation.details }}
           </div>
@@ -62,9 +69,15 @@
           
           <div *ngIf="conversation.code_files && conversation.code_files.length > 0" class="code-files">
             <strong>Code Files Generated:</strong>
-            <ul>
-              <li *ngFor="let file of conversation.code_files" data-testid="code-file">{{ file }}</li>
-            </ul>
+            <div class="file-links">
+              <a *ngFor="let file of conversation.code_files" 
+                 [href]="getFileUrl(file)" 
+                 target="_blank" 
+                 class="file-link"
+                 data-testid="code-file">
+                <i class="pi pi-file"></i> {{ file }}
+              </a>
+            </div>
           </div>
           
           <div *ngIf="conversation.escalations && conversation.escalations.length > 0" class="escalations">

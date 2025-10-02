@@ -120,8 +120,34 @@
         }
       }
       
-      .conversation-details {
+        .conversation-details {
         padding: 1rem;
+        
+        .conversation-prompt {
+          margin-bottom: 1rem;
+          padding: 1rem;
+          background: #e3f2fd;
+          border-left: 4px solid #2196f3;
+          border-radius: 0.25rem;
+          
+          .prompt-content {
+            margin-top: 0.5rem;
+            
+            pre {
+              background: #f8f9fa;
+              padding: 1rem;
+              border-radius: 0.25rem;
+              border: 1px solid #dee2e6;
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              max-height: 300px;
+              overflow-y: auto;
+              font-family: 'Courier New', monospace;
+              font-size: 0.875rem;
+              line-height: 1.4;
+            }
+          }
+        }
         
         .conversation-details-text {
           margin-bottom: 1rem;
@@ -145,17 +171,33 @@
         .code-files {
           margin-bottom: 1rem;
           
-          ul {
-            margin: 0.5rem 0;
-            padding-left: 1.5rem;
+          .file-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
             
-            li {
-              font-family: 'Courier New', monospace;
-              background: #f8f9fa;
-              padding: 0.25rem 0.5rem;
+            .file-link {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.5rem;
+              padding: 0.5rem 1rem;
+              background: #007bff;
+              color: white;
+              text-decoration: none;
               border-radius: 0.25rem;
-              margin: 0.25rem 0;
-              display: inline-block;
+              font-size: 0.875rem;
+              transition: background-color 0.2s;
+              
+              &:hover {
+                background: #0056b3;
+                color: white;
+                text-decoration: none;
+              }
+              
+              i {
+                font-size: 0.75rem;
+              }
             }
           }
         }
