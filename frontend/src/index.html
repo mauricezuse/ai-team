@@ -11,6 +11,20 @@
     * { color: #1e293b !important; }
     body { background-color: #f8fafc !important; }
   </style>
+  <script>
+    // NUCLEAR JAVASCRIPT: Force all text to be dark after page load
+    document.addEventListener('DOMContentLoaded', function() {
+      const style = document.createElement('style');
+      style.textContent = '* { color: #1e293b !important; } body { background-color: #f8fafc !important; }';
+      document.head.appendChild(style);
+      
+      // Force all existing elements
+      const allElements = document.querySelectorAll('*');
+      allElements.forEach(el => {
+        el.style.setProperty('color', '#1e293b', 'important');
+      });
+    });
+  </script>
 </head>
 <body>
   <app-root></app-root>
