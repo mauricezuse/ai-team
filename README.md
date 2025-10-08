@@ -43,6 +43,9 @@ ai-team/
 │       ├── __init__.py
 │       └── logger.py
 │
+├── repos/                    # Cloned target projects (git submodules)
+│   └── {project-name}/       # Each project the AI team works on
+│
 ├── tests/                     # Unit/integration tests for orchestration logic
 │   └── test_workflow.py
 │
@@ -56,6 +59,22 @@ ai-team/
 ├── README.md                  # Project overview, setup, usage
 └── .gitignore
 ```
+
+## Project Cloning Workflow
+
+The AI Team system automatically clones target projects into the `/repos` folder using git submodules:
+
+1. **Environment Configuration**: Set `NEGISHI_GITHUB_REPO` in your `.env` file
+2. **Automatic Cloning**: When a workflow runs, it automatically:
+   - Clones the target repository to `/repos/{project-name}`
+   - Uses git submodules for proper version control
+   - Creates feature branches for development
+   - Generates code files in the cloned repository
+3. **File Generation**: All generated code is saved to the cloned project in `/repos`
+4. **Version Control**: Changes are committed and pushed to feature branches
+5. **Pull Requests**: Automatic PR creation with detailed descriptions
+
+**Important**: All projects the AI team works on are cloned to `/repos/{project-name}`, never in the root directory.
 
 ## Local Development
 
