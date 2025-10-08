@@ -1,0 +1,27 @@
+<div *ngIf="agent">
+  <div *ngIf="!editMode">
+    <h2>{{ agent.name }}</h2>
+    <p><strong>Role:</strong> {{ agent.role }}</p>
+    <p><strong>Goal:</strong> {{ agent.goal }}</p>
+    <button pButton type="button" label="Edit" icon="pi pi-pencil" (click)="enableEdit()"></button>
+  </div>
+  <form *ngIf="editMode" (ngSubmit)="save()">
+    <div class="p-field">
+      <label for="name">Name</label>
+      <input id="name" type="text" pInputText [(ngModel)]="editedAgent.name" name="name" required>
+    </div>
+    <div class="p-field">
+      <label for="role">Role</label>
+      <input id="role" type="text" pInputText [(ngModel)]="editedAgent.role" name="role" required>
+    </div>
+    <div class="p-field">
+      <label for="goal">Goal</label>
+      <input id="goal" type="text" pInputText [(ngModel)]="editedAgent.goal" name="goal" required>
+    </div>
+    <button pButton type="submit" label="Save"></button>
+    <button pButton type="button" label="Cancel" class="p-button-secondary" (click)="cancel()"></button>
+  </form>
+</div>
+<div *ngIf="!agent">
+  <p>Loading...</p>
+</div>

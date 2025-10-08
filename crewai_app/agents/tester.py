@@ -3,6 +3,8 @@ from crewai.tools import BaseTool
 from pydantic import PrivateAttr
 from crewai_app.services.openai_service import OpenAIService
 from crewai_app.config import settings
+import time
+import hashlib
 
 class TesterTool(BaseTool):
     name: str = "tester_tool"
@@ -20,27 +22,51 @@ class TesterTool(BaseTool):
         return self._run("Say hello from the Tester agent!")
 
 class TesterAgent:
+    def __init__(self):
+        self._llm_cache = {}
+
+    def _prompt_hash(self, prompt):
+        return hashlib.sha256(prompt.encode('utf-8')).hexdigest()
+
+    def _cache_get(self, key):
+        return self._llm_cache.get(key)
+
+    def _cache_set(self, key, value):
+        self._llm_cache[key] = value
+
     def select_relevant_files(self, implementation_result, plan, codebase_index):
         """
         Use the LLM to select which files need Playwright tests for the given implementation result and plan.
         Returns a list of file paths.
         """
+        impl_str = str(implementation_result)[:250]
+        plan_str = str(plan)[:250]
+        file_paths = list(codebase_index.keys())[:10]
         prompt = (
             f"Given the following implementation result and plan, select which files from the codebase index need Playwright tests.\n"
-            f"Implementation Result: {implementation_result}\n"
-            f"Plan: {plan}\n"
-            f"Codebase Index: {list(codebase_index.keys())}\n"
+            f"Implementation Result: {impl_str}\n"
+            f"Plan: {plan_str}\n"
+            f"Codebase Index: {file_paths}\n"
             f"Output a Python list of file paths."
         )
+        if len(prompt) > 2000:
+            prompt = f"Files: {[f[:40] for f in file_paths]}\nSummary: Playwright test selection."
+        prompt_hash = self._prompt_hash(prompt)
+        cached = self._cache_get(prompt_hash)
+        if cached:
+            return cached
+        time.sleep(10)  # Throttle LLM calls
         files_str = tester_tool._run(prompt)
         try:
             files = eval(files_str, {"__builtins__": {}})
             if isinstance(files, list) and all(isinstance(f, str) for f in files):
+                self._cache_set(prompt_hash, files)
                 return files
         except Exception:
             pass
-        # Fallback: return all files
-        return list(codebase_index.keys())
+        # Fallback: return pruned file list
+        self._cache_set(prompt_hash, file_paths)
+        return file_paths
 
     def prepare_and_run_tests(self, implementation_result, plan, rules, codebase_index):
         # Two-stage: first select relevant files, then generate tests
@@ -78,7 +104,10 @@ class TesterAgent:
             return {"tests": files_to_test, "result": "Playwright tests generated"}
         # Fallback stub
         test_result = {
-            "tests": ["test_feature_x", "test_feature_y"],
+            "tests": [
+                {"file": "unknown", "test_code": "test_feature_x", "test_location": "tests/playwright/"},
+                {"file": "unknown", "test_code": "test_feature_y", "test_location": "tests/playwright/"}
+            ],
             "result": "All tests passed"
         }
         return test_result

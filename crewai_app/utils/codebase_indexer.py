@@ -6,6 +6,7 @@ import logging
 import asyncio
 from typing import Dict, List, Any, Optional, Callable, Set
 import hashlib
+import aiofiles
 
 try:
     import openai
@@ -55,13 +56,15 @@ logging.basicConfig(
 DEFAULT_EXCLUDE_DIRS = {'.git', 'venv', '__pycache__', 'node_modules', 'migrations', 'tests'}
 DEFAULT_EXCLUDE_FILES = {'__init__.py', '.env', 'secrets.py', 'settings.py', 'config.py'}
 DEFAULT_SENSITIVE_PATTERNS = {'.env', 'secrets', 'credential', 'password', 'token', 'key'}
+# File extensions to include in indexing
+DEFAULT_INCLUDE_EXTENSIONS = {'.py', '.ts', '.js', '.html', '.scss', '.css', '.json', '.yaml', '.yml'}
 MAX_FILES_PER_DIR = 20  # For summarization
 TREE_CACHE_FILE = 'codebase_tree_cache.json'
 INDEX_CACHE_FILE = 'codebase_index_cache.json'
 EMBEDDING_CACHE_FILE = 'embedding_cache.json'
 
 # --- Plugin system for file selection/indexing ---
-PLUGIN_REGISTRY = {}
+PLUGIN_REGISTRY: dict[str, Callable] = {}
 
 def register_plugin(name: str):
     def decorator(func):
@@ -82,6 +85,7 @@ def build_directory_tree(
     exclude_dirs: Set[str] = DEFAULT_EXCLUDE_DIRS,
     exclude_files: Set[str] = DEFAULT_EXCLUDE_FILES,
     sensitive_patterns: Set[str] = DEFAULT_SENSITIVE_PATTERNS,
+    include_extensions: Set[str] = DEFAULT_INCLUDE_EXTENSIONS,
     max_files_per_dir: int = MAX_FILES_PER_DIR,
     allowed_dirs: Optional[List[str]] = None
 ) -> Dict[str, List[str]]:
@@ -100,7 +104,7 @@ def build_directory_tree(
                 continue
         if should_exclude(dirpath, exclude_dirs):
             continue
-        filtered = [f for f in filenames if f.endswith('.py') and f not in exclude_files and not is_sensitive_file(f, sensitive_patterns)]
+        filtered = [f for f in filenames if any(f.endswith(ext) for ext in include_extensions) and f not in exclude_files and not is_sensitive_file(f, sensitive_patterns)]
         if summarize and len(filtered) > max_files_per_dir:
             filtered = filtered[:max_files_per_dir] + [f'...({len(filtered) - max_files_per_dir} more)']
         tree[rel_dir] = filtered
@@ -128,7 +132,7 @@ def get_recently_changed_files(root_dir: str, n_commits: int = 1) -> List[str]:
             ["git", "-C", root_dir, "diff", "--name-only", f"HEAD~{n_commits}..HEAD"],
             capture_output=True, text=True
         )
-        files = [line.strip() for line in result.stdout.splitlines() if line.strip() and line.endswith('.py')]
+        files = [line.strip() for line in result.stdout.splitlines() if line.strip() and any(line.strip().endswith(ext) for ext in DEFAULT_INCLUDE_EXTENSIONS)]
         return files
     except Exception as e:
         logging.warning(f"Git diff failed: {e}")
@@ -161,26 +165,36 @@ async def async_parse_file(file_path: str, rel_path: str) -> Optional[dict]:
     try:
         async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
             content = await f.read()
-        tree = ast.parse(content, filename=rel_path)
-        file_info = {'classes': [], 'functions': []}
-        for node in ast.iter_child_nodes(tree):
-            if isinstance(node, ast.ClassDef):
-                file_info['classes'].append({
-                    'name': node.name,
-                    'docstring': ast.get_docstring(node)
-                })
-            elif isinstance(node, ast.FunctionDef):
-                file_info['functions'].append({
-                    'name': node.name,
-                    'docstring': ast.get_docstring(node)
-                })
+        
+        # Handle different file types
+        if rel_path.endswith('.py'):
+            # Python files - use AST parsing
+            tree = ast.parse(content, filename=rel_path)
+            file_info = {'classes': [], 'functions': []}
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, ast.ClassDef):
+                    file_info['classes'].append({
+                        'name': node.name,
+                        'docstring': ast.get_docstring(node)
+                    })
+                elif isinstance(node, ast.FunctionDef):
+                    file_info['functions'].append({
+                        'name': node.name,
+                        'docstring': ast.get_docstring(node)
+                    })
+        else:
+            # Non-Python files - just store content summary
+            file_info = {
+                'content_preview': content[:500] + ('...' if len(content) > 500 else ''),
+                'file_type': rel_path.split('.')[-1] if '.' in rel_path else 'unknown'
+            }
+        
         return rel_path, file_info
     except Exception as e:
         logging.warning(f"Failed to parse {rel_path}: {e}")
         return None
 
 async def async_index_selected_files(root_dir: str, selected_files: List[str]) -> Dict[str, dict]:
-    import aiofiles
     tasks = []
     for rel_path in selected_files:
         file_path = os.path.join(root_dir, rel_path)
@@ -208,19 +222,29 @@ def index_selected_files(root_dir: str, selected_files: List[str], use_cache: bo
                 content = f.read()
             # Summarize if large
             content = summarize_file_content(content)
-            tree = ast.parse(content, filename=rel_path)
-            file_info = {'classes': [], 'functions': []}
-            for node in ast.iter_child_nodes(tree):
-                if isinstance(node, ast.ClassDef):
-                    file_info['classes'].append({
-                        'name': node.name,
-                        'docstring': ast.get_docstring(node)
-                    })
-                elif isinstance(node, ast.FunctionDef):
-                    file_info['functions'].append({
-                        'name': node.name,
-                        'docstring': ast.get_docstring(node)
-                    })
+            
+            # Handle different file types
+            if rel_path.endswith('.py'):
+                # Python files - use AST parsing
+                tree = ast.parse(content, filename=rel_path)
+                file_info = {'classes': [], 'functions': []}
+                for node in ast.iter_child_nodes(tree):
+                    if isinstance(node, ast.ClassDef):
+                        file_info['classes'].append({
+                            'name': node.name,
+                            'docstring': ast.get_docstring(node)
+                        })
+                    elif isinstance(node, ast.FunctionDef):
+                        file_info['functions'].append({
+                            'name': node.name,
+                            'docstring': ast.get_docstring(node)
+                        })
+            else:
+                # Non-Python files - just store content summary
+                file_info = {
+                    'content_preview': content[:500] + ('...' if len(content) > 500 else ''),
+                    'file_type': rel_path.split('.')[-1] if '.' in rel_path else 'unknown'
+                }
             code_index[rel_path] = file_info
             # Update cache
             if use_cache:
@@ -247,6 +271,9 @@ def get_embedding(text: str, model: str = 'text-embedding-ada-002') -> list:
     """
     Get embedding for text using OpenAI API, with caching. Compatible with openai>=1.0.0.
     """
+    if not text or not text.strip():
+        logging.error("get_embedding called with empty or whitespace-only input. Aborting embedding call.")
+        raise RuntimeError("get_embedding called with empty or whitespace-only input.")
     cache = load_embedding_cache()
     key = hashlib.sha256((model + text).encode('utf-8')).hexdigest()
     if cache and key in cache:
@@ -269,8 +296,8 @@ def get_embedding(text: str, model: str = 'text-embedding-ada-002') -> list:
         update_embedding_cache(key, vec)
         return vec
     except Exception as e:
-        logging.warning(f"Embedding failed: {e}")
-        return []
+        logging.error(f"Embedding failed: {e}")
+        raise RuntimeError(f"Embedding failed: {e}")
 
 def load_embedding_cache(cache_file: str = EMBEDDING_CACHE_FILE) -> Optional[dict]:
     if not os.path.exists(cache_file):
@@ -321,6 +348,9 @@ class SemanticSearchAgent:
             ranked = semantic_search(all_files, story)
             return ranked[:top_k]
         # Embed the story
+        if not story or not story.strip():
+            logging.warning("[SemanticSearchAgent] Story input to embedding is empty or whitespace. Skipping embedding.")
+            return []
         story_emb = self.embedder(story, self.model)
         if not story_emb:
             return []
@@ -332,6 +362,9 @@ class SemanticSearchAgent:
                     continue
                 rel_path = os.path.join(d, f)
                 summary = self.summarize_file(rel_path)
+                if not summary or not summary.strip():
+                    logging.warning(f"[SemanticSearchAgent] File summary for {rel_path} is empty or whitespace. Skipping embedding.")
+                    continue
                 file_emb = self.embedder(summary, self.model)
                 sim = cosine_similarity(story_emb, file_emb)
                 scored.append((sim, rel_path))
@@ -350,7 +383,6 @@ def index_selected_files_async(root_dir: str, selected_files: List[str]) -> Dict
     Index selected files using async parsing for speed. Falls back to sync if asyncio fails.
     """
     try:
-        import aiofiles  # Ensure aiofiles is available
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(async_index_selected_files(root_dir, selected_files))
     except Exception as e:
@@ -387,14 +419,14 @@ def agent_select_relevant_files(tree: Dict[str, List[str]], story: str, agent: A
                 selected = agent(tree, story, prompt=prompt)
             else:
                 raise ValueError("Agent must be callable or have a select_relevant_files method.")
-        # Fallback: if selection fails or is empty, select all .py files
+        # Fallback: if selection fails or is empty, select all relevant files
         if not selected:
-            logging.warning("File selection returned empty. Falling back to all .py files in the repo.")
-            selected = [os.path.join(d, f) for d, files in tree.items() for f in files if f.endswith('.py') and not f.startswith('...')]
+            logging.warning("File selection returned empty. Falling back to all relevant files in the repo.")
+            selected = [os.path.join(d, f) for d, files in tree.items() for f in files if any(f.endswith(ext) for ext in DEFAULT_INCLUDE_EXTENSIONS) and not f.startswith('...')]
         return selected
     except Exception as e:
-        logging.warning(f"File selection failed: {e}. Falling back to all .py files in the repo.")
-        return [os.path.join(d, f) for d, files in tree.items() for f in files if f.endswith('.py') and not f.startswith('...')]
+        logging.warning(f"File selection failed: {e}. Falling back to all relevant files in the repo.")
+        return [os.path.join(d, f) for d, files in tree.items() for f in files if any(f.endswith(ext) for ext in DEFAULT_INCLUDE_EXTENSIONS) and not f.startswith('...')]
 
 # --- Example LLM Agent Interface ---
 class LLMAgent:

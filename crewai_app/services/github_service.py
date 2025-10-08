@@ -1,7 +1,8 @@
 # Placeholder for GitHub integration service
 # Requires: pip install requests
 import os
-import requests
+import requests  # type: ignore
+import subprocess
 
 class GitHubService:
     def __init__(self, use_real: bool):
@@ -124,4 +125,75 @@ class GitHubService:
             return True
         else:
             print(f"[Stub] Would commit test file to branch: {branch}")
-            return True 
+            return True
+
+    def list_pull_requests(self, state="all"):
+        if self.use_real:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            params = {"state": state}
+            try:
+                response = requests.get(f"{self.api_url}/pulls", headers=headers, params=params)
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                print(f"[GitHub ERROR] Failed to list PRs: {e}")
+                return []
+        else:
+            print("[Stub] Would list PRs")
+            return []
+
+    def get_pull_request(self, number):
+        if self.use_real:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            try:
+                response = requests.get(f"{self.api_url}/pulls/{number}", headers=headers)
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                print(f"[GitHub ERROR] Failed to fetch PR #{number}: {e}")
+                return None
+        else:
+            print(f"[Stub] Would fetch PR #{number}")
+            return None
+
+    def get_pull_request_files(self, number):
+        if self.use_real:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            try:
+                response = requests.get(f"{self.api_url}/pulls/{number}/files", headers=headers)
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                print(f"[GitHub ERROR] Failed to fetch PR files for #{number}: {e}")
+                return []
+        else:
+            print(f"[Stub] Would fetch PR files for #{number}")
+            return []
+
+    def add_submodule(self, submodule_path: str, repo_url: str):
+        """
+        Adds the given repo as a git submodule at the specified path.
+        Usage:
+            github_service.add_submodule('backend', 'https://github.com/your-org/backend-repo.git')
+        """
+        try:
+            if os.path.exists(submodule_path):
+                print(f"[GitHubService] Submodule path '{submodule_path}' already exists. Skipping add.")
+                return True
+            print(f"[GitHubService] Adding submodule: {repo_url} at {submodule_path}")
+            subprocess.run(["git", "submodule", "add", repo_url, submodule_path], check=True)
+            subprocess.run(["git", "submodule", "update", "--init", "--recursive"], check=True)
+            print(f"[GitHubService] Submodule added and initialized: {submodule_path}")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"[GitHubService ERROR] Failed to add submodule: {e}")
+            return False 

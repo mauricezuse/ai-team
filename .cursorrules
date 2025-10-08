@@ -1,0 +1,384 @@
+# AI Team Project Rules for Cursor
+
+## Project Overview
+This is a production-ready AI orchestration platform using CrewAI for multi-agent collaboration. The system manages workflows, integrates with Jira/GitHub, and generates code for target projects.
+
+## Architecture & Structure
+
+### Core Components
+- **Backend**: FastAPI (Python) on port 8000
+- **Frontend**: Angular on port 4001  
+- **Database**: SQLite with SQLAlchemy ORM
+- **Testing**: Playwright E2E tests
+- **AI Agents**: CrewAI with Azure OpenAI integration
+
+### Directory Structure
+```
+ai-team/
+├── crewai_app/           # Main Python backend (FastAPI + CrewAI)
+│   ├── agents/          # AI agent role definitions
+│   ├── workflows/       # Workflow orchestration logic
+│   ├── services/        # External service integrations
+│   ├── models/          # Database models and schemas
+│   └── utils/           # Utility functions and logging
+├── frontend/             # Angular frontend (port 4001)
+│   ├── src/app/features/ # Feature modules (workflows, agents, dashboard)
+│   ├── src/app/shared/   # Shared components and services
+│   └── src/assets/       # Static assets and styles
+├── repos/               # Cloned target projects (git submodules)
+│   └── {project-name}/  # Each project the AI team works on
+├── tests/               # Comprehensive test suites
+│   ├── playwright/      # E2E tests with Playwright
+│   └── test_*.py        # Unit and integration tests
+├── docs/                # Project documentation
+│   ├── DEPLOYMENT.md    # Production deployment guide
+│   ├── CI_CD.md         # CI/CD pipeline documentation
+│   └── README.md        # Documentation overview
+└── infra/               # Infrastructure as Code
+    ├── bicep/           # Azure Bicep templates
+    └── terraform/       # Terraform scripts
+```
+
+## Development Guidelines
+
+### Commit Message Standards
+- **AI Team project**: Use `MINIONS-xxx:` prefix
+- **Subprojects in /repos**: Use `NEGISHI-xxx:` prefix
+- **Format**: `MINIONS-123: Brief description of changes`
+- **Examples**:
+  - `MINIONS-1: Fix API serialization for workflow responses`
+  - `MINIONS-2: Add agent filter buttons to frontend`
+  - `MINIONS-3: Update Playwright tests for new features`
+
+### Code Quality Standards
+- **Python**: Follow PEP 8, use type hints, docstrings
+- **TypeScript/Angular**: Use strict mode, proper interfaces
+- **Testing**: Write tests for all new features
+- **Documentation**: Update README/docs for significant changes
+
+### Documentation Requirements
+- **README Updates**: MUST update README.md in any core folder when making changes
+- **Core Folders**: crewai_app/, frontend/, tests/, docs/, repos/
+- **Change Types**: New features, API changes, component changes, test updates
+- **Update Scope**: Reflect new functionality, file changes, and architectural updates
+- **Commit Message**: Include "Update README" in commit message when README is modified
+
+### Project Cloning Workflow
+- **Target projects**: Always cloned to `/repos/{project-name}`
+- **Never clone**: Projects in root directory
+- **Use git submodules**: For proper version control
+- **Environment**: Set `NEGISHI_GITHUB_REPO` in `.env`
+
+## Technology Stack
+
+### Backend (Python)
+- **Framework**: FastAPI with Pydantic models
+- **Database**: SQLite with SQLAlchemy ORM
+- **AI**: CrewAI with Azure OpenAI integration
+- **Services**: Jira, GitHub, OpenAI services
+- **Port**: 8000
+
+### Frontend (Angular)
+- **Framework**: Angular with PrimeNG components
+- **Styling**: SCSS with PrimeFlex
+- **Port**: 4001
+- **Proxy**: Routes API calls to backend
+
+### Testing
+- **E2E**: Playwright tests
+- **Unit**: Python pytest
+- **Config**: Desktop-only tests (mobile disabled)
+
+## Environment Configuration
+
+### Required Environment Variables
+```bash
+# Jira Integration
+NEGISHI_JIRA_API_TOKEN=your_token
+NEGISHI_JIRA_EMAIL=your_email
+NEGISHI_JIRA_BASE_URL=https://your-domain.atlassian.net
+
+# GitHub Integration  
+GITHUB_TOKEN=your_token
+NEGISHI_GITHUB_REPO=org/repo
+
+# Azure OpenAI
+AZURE_OPENAI_API_KEY=your_key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=your-deployment
+
+# Database
+DATABASE_URL=sqlite:///./ai_team.db
+```
+
+## Development Workflow
+
+### Local Development
+1. **Backend**: `uvicorn crewai_app.main:app --reload --host 0.0.0.0 --port 8000`
+2. **Frontend**: `cd frontend && npm run start -- --port 4001`
+3. **Tests**: `npx playwright test --project=chromium`
+
+### Code Changes
+- **Backend changes**: Test with FastAPI endpoints
+- **Frontend changes**: Test with Angular dev server
+- **Database changes**: Update models and migrations
+- **AI agent changes**: Test with real Jira stories
+
+### Testing Requirements
+- **New features**: Must include Playwright E2E tests
+- **API endpoints**: Test with curl or Postman
+- **Frontend components**: Test with Angular unit tests
+- **Workflow execution**: Test with real Jira integration
+
+### Documentation Maintenance
+- **README Synchronization**: Keep README files synchronized with code changes
+- **Architecture Updates**: Update architecture diagrams when structure changes
+- **API Documentation**: Update API docs when endpoints change
+- **Component Documentation**: Update component docs when UI changes
+- **Test Documentation**: Update test docs when test suites change
+
+## AI Agent Guidelines
+
+### Agent Roles
+- **Product Manager**: Story analysis and requirements
+- **Solution Architect**: System design and architecture
+- **Backend Developer**: API and database implementation
+- **Frontend Developer**: UI/UX implementation
+- **QA Tester**: Testing and quality assurance
+- **Code Reviewer**: Code review and optimization
+
+### Workflow Execution
+- **Input**: Jira story ID (e.g., NEGISHI-165)
+- **Process**: Multi-agent collaboration
+- **Output**: Generated code files in `/repos/{project}`
+- **Version Control**: Automatic commits and PRs
+
+## File Organization
+
+### Backend Files (crewai_app/)
+- `main.py`: FastAPI app with all API endpoints and workflow execution
+- `database.py`: Database models, connection management, and migrations
+- `config.py`: Application configuration and environment variables
+- `agents/`: AI agent role definitions and implementations
+  - `pm.py`: Product Manager agent for story analysis
+  - `architect.py`: Solution Architect agent for system design
+  - `developer.py`: Backend Developer agent for implementation
+  - `frontend.py`: Frontend Developer agent for UI implementation
+  - `tester.py`: QA Tester agent for test creation
+  - `reviewer.py`: Code Reviewer agent for code optimization
+- `workflows/`: Workflow orchestration and execution logic
+  - `story_implementation_workflow.py`: Main workflow implementation
+  - `enhanced_story_workflow.py`: Enhanced workflow with advanced features
+- `services/`: External service integrations
+  - `jira_service.py`: Jira API integration for story retrieval
+  - `github_service.py`: GitHub API integration for repository operations
+  - `openai_service.py`: Azure OpenAI integration for AI agents
+- `models/`: Database models and Pydantic schemas
+  - `workflow.py`: Workflow database model
+  - `conversation.py`: Conversation database model
+  - `code_file.py`: Code file database model
+- `utils/`: Utility functions and helpers
+  - `logger.py`: Logging configuration and utilities
+  - `helpers.py`: Common helper functions
+
+### Frontend Files (frontend/)
+- `src/app/features/`: Feature modules for different application areas
+  - `workflows/`: Workflow management UI components
+    - `workflows-list.component.*`: Workflow listing and management
+    - `workflow-detail.component.*`: Individual workflow details
+    - `workflow-create.component.*`: Workflow creation interface
+  - `agents/`: Agent monitoring and management
+    - `agent-conversation.component.*`: Agent conversation display
+    - `agent-filter.component.*`: Agent filtering controls
+  - `dashboard/`: System dashboard and overview
+- `src/app/shared/`: Shared components and services
+  - `components/`: Reusable UI components
+  - `services/`: Angular services for API communication
+  - `models/`: TypeScript interfaces and models
+- `src/assets/`: Static assets, images, and global styles
+- `angular.json`: Angular CLI configuration
+- `proxy.conf.json`: API proxy configuration for development
+
+### Test Files (tests/)
+- `playwright/`: End-to-end test suites using Playwright
+  - `test_workflow_creation.spec.ts`: Workflow creation tests
+  - `test_workflow_execution.spec.ts`: Workflow execution tests
+  - `test_agent_conversations.spec.ts`: Agent conversation tests
+  - `test_negishi_165.spec.ts`: Specific workflow test
+  - `playwright.config.ts`: Playwright configuration
+- `test_*.py`: Python unit and integration tests
+  - `test_workflow_creation_unit.py`: Unit tests for workflow creation
+  - `test_workflow_creation_integration.py`: Integration tests
+- `global-setup.ts`: Global test setup and configuration
+
+### Documentation Files (docs/)
+- `DEPLOYMENT.md`: Production deployment guide and procedures
+- `CI_CD.md`: Continuous integration and deployment documentation
+- `README.md`: Documentation overview and structure
+
+### Target Projects (repos/)
+- `{project-name}/`: Cloned target projects managed as git submodules
+  - Each project contains code generated by AI agents
+  - Maintains separate git history and version control
+  - Feature branches created for each workflow execution
+
+## Common Patterns
+
+### API Response Format
+```python
+{
+    "id": 1,
+    "status": "completed",
+    "conversations": [...],
+    "code_files": [...],
+    "escalations": [...],
+    "collaborations": [...]
+}
+```
+
+### Frontend Component Structure
+```typescript
+@Component({
+  selector: 'app-component',
+  templateUrl: './component.html',
+  styleUrl: './component.scss'
+})
+export class Component implements OnInit {
+  // Component logic
+}
+```
+
+### Database Model Pattern
+```python
+class Model(Base):
+    __tablename__ = "table_name"
+    id = Column(Integer, primary_key=True)
+    # Fields with proper types and constraints
+```
+
+## Debugging & Troubleshooting
+
+### Common Issues
+- **API 500 errors**: Check serialization in main.py
+- **Frontend not loading**: Verify Angular dev server on port 4001
+- **Database errors**: Check SQLAlchemy models and migrations
+- **Jira integration**: Verify credentials and story existence
+- **Git submodules**: Ensure projects clone to /repos folder
+
+### Logging
+- **Backend**: Uses structured logging with context
+- **Frontend**: Console logging for debugging
+- **AI Agents**: Detailed workflow execution logs
+
+## Production Deployment
+
+### Requirements
+- **Environment**: Production-ready with proper secrets
+- **Database**: Persistent storage for workflows
+- **Monitoring**: Logging and error tracking
+- **Security**: API authentication and validation
+
+### Documentation
+- **Setup**: `docs/DEPLOYMENT.md`
+- **CI/CD**: `docs/CI_CD.md`
+- **API**: FastAPI auto-generated docs at `/docs`
+
+## Best Practices
+
+### Code Organization
+- **Modular design**: Separate concerns clearly
+- **Error handling**: Comprehensive try/catch blocks
+- **Type safety**: Use type hints and interfaces
+- **Testing**: Write tests before implementing features
+
+### Documentation Best Practices
+- **Immediate Updates**: Update README files immediately when making changes
+- **Comprehensive Coverage**: Document all new features, changes, and improvements
+- **Clear Descriptions**: Use clear, descriptive language in documentation
+- **Code Examples**: Include practical code examples in documentation
+- **Version Tracking**: Track documentation changes in commit messages
+
+### Git Workflow
+- **Branch naming**: Use feature branch names
+- **Commit messages**: Follow prefix conventions
+- **Pull requests**: Include detailed descriptions
+- **Code review**: Required for all changes
+
+### Performance
+- **Database queries**: Optimize with proper indexing
+- **API responses**: Use pagination for large datasets
+- **Frontend**: Lazy loading and component optimization
+- **Caching**: Implement appropriate caching strategies
+
+## Security Considerations
+
+### API Security
+- **Input validation**: Use Pydantic models
+- **Authentication**: Implement proper auth mechanisms
+- **Rate limiting**: Prevent API abuse
+- **CORS**: Configure for frontend access
+
+### Data Protection
+- **Secrets management**: Use environment variables
+- **Database security**: Proper access controls
+- **Logging**: Avoid logging sensitive data
+- **Dependencies**: Keep packages updated
+
+## Maintenance
+
+### Regular Tasks
+- **Dependency updates**: Keep packages current
+- **Database cleanup**: Remove old workflow data
+- **Log rotation**: Manage log file sizes
+- **Performance monitoring**: Track system metrics
+
+### Monitoring
+- **API health**: Monitor endpoint responses
+- **Database performance**: Track query times
+- **Frontend errors**: Monitor console errors
+- **Workflow execution**: Track success rates
+
+## README Update Requirements
+
+### Mandatory README Updates
+When making changes to any core folder, you MUST update the corresponding README.md file:
+
+#### Core Folders and README Files
+- **crewai_app/**: Update `crewai_app/README.md` for backend changes
+- **frontend/**: Update `frontend/README.md` for frontend changes  
+- **tests/**: Update `tests/README.md` for test changes
+- **docs/**: Update `docs/README.md` for documentation changes
+- **repos/**: Update `repos/README.md` for target project changes
+
+#### Change Types Requiring README Updates
+- **New Features**: Document new functionality and usage
+- **API Changes**: Update API endpoint documentation
+- **Component Changes**: Update component structure and usage
+- **Test Updates**: Update test configuration and execution
+- **Architecture Changes**: Update system architecture documentation
+- **Configuration Changes**: Update setup and configuration instructions
+
+#### README Update Checklist
+- [ ] Update overview section if functionality changes
+- [ ] Update directory structure if files are added/moved
+- [ ] Update API documentation if endpoints change
+- [ ] Update component documentation if UI changes
+- [ ] Update test documentation if test structure changes
+- [ ] Update environment variables if configuration changes
+- [ ] Update development instructions if setup changes
+- [ ] Update troubleshooting section if new issues arise
+
+#### Commit Message Format
+When README files are updated, include in commit message:
+```
+MINIONS-xxx: [Description] - Update README
+```
+
+Example:
+```
+MINIONS-1: Add new API endpoint for workflow status - Update README
+MINIONS-2: Fix frontend component styling - Update README
+MINIONS-3: Add new test suite for agent conversations - Update README
+```
+
+Remember: This is a production system handling real Jira stories and generating code. Always test thoroughly and maintain high code quality standards.

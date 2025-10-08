@@ -43,6 +43,9 @@ ai-team/
 │       ├── __init__.py
 │       └── logger.py
 │
+├── repos/                    # Cloned target projects (git submodules)
+│   └── {project-name}/       # Each project the AI team works on
+│
 ├── tests/                     # Unit/integration tests for orchestration logic
 │   └── test_workflow.py
 │
@@ -57,14 +60,53 @@ ai-team/
 └── .gitignore
 ```
 
+## Project Cloning Workflow
+
+The AI Team system automatically clones target projects into the `/repos` folder using git submodules:
+
+1. **Environment Configuration**: Set `NEGISHI_GITHUB_REPO` in your `.env` file
+2. **Automatic Cloning**: When a workflow runs, it automatically:
+   - Clones the target repository to `/repos/{project-name}`
+   - Uses git submodules for proper version control
+   - Creates feature branches for development
+   - Generates code files in the cloned repository
+3. **File Generation**: All generated code is saved to the cloned project in `/repos`
+4. **Version Control**: Changes are committed and pushed to feature branches
+5. **Pull Requests**: Automatic PR creation with detailed descriptions
+
+**Important**: All projects the AI team works on are cloned to `/repos/{project-name}`, never in the root directory.
+
+## Local Development
+
+Backend (FastAPI):
+```
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn crewai_app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Frontend (Angular on port 4001):
+```
+cd frontend
+npm install
+npm run start -- --port 4001
+```
+
+Playwright E2E (points to http://localhost:4001):
+```
+npx playwright install
+npx playwright test --project=chromium
+```
+
 ## Setup
 1. Clone the repo
 2. Create a Python virtual environment
 3. Install dependencies: `pip install -r requirements.txt`
 4. Set up your `.env` file with Azure OpenAI and other secrets
-5. Run locally: `uvicorn crewai_app.main:app --reload`
-6. Build and run with Docker (see Dockerfile)
-7. Deploy to Azure using Bicep/Terraform in `infra/`
+5. Run backend and frontend as above
+6. Run E2E tests as above
+7. See `docs/DEPLOYMENT.md` and `docs/CI_CD.md`
 
 ## Contributing
 - Follow best practices for modular code and clear separation of concerns

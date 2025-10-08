@@ -17,14 +17,21 @@ import os
 import json
 from datetime import datetime
 from typing import List, Dict, Any
-from crewai_app.agents.developer import developer_tool
-from crewai_app.agents.tester import tester_tool
+from crewai_app.agents.developer import DeveloperAgent
+from crewai_app.agents.tester import TesterAgent
+from crewai_app.services.openai_service import OpenAIService
+from crewai_app.config import settings
 from crewai_app.utils.codebase_indexer import build_directory_tree, agent_select_relevant_files, index_selected_files_async
 
 RESULTS_DIR = "workflow_results"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 def implement_stories_with_tests(stories: List[str]):
+    # Initialize agents
+    openai_service = OpenAIService(deployment=settings.deployment_developer)
+    developer_agent = DeveloperAgent(openai_service)
+    tester_agent = TesterAgent()
+    
     results = []
     for idx, story in enumerate(stories, 1):
         # Developer agent prompt
@@ -33,14 +40,14 @@ def implement_stories_with_tests(stories: List[str]):
             "Include TypeScript, HTML, and CSS as needed.\n\n"
             f"User Story:\n{story}\n"
         )
-        angular_code = developer_tool._run(dev_prompt)
+        angular_code = developer_agent._run_llm(dev_prompt, step="developer.implement")
         # Tester agent prompt
         test_prompt = (
             "Given the following Angular code, generate Jasmine/Karma unit and integration tests (spec.ts) for it. "
             "Cover all acceptance criteria and edge cases.\n\n"
             f"Angular Code:\n{angular_code}\n"
         )
-        test_code = tester_tool._run(test_prompt)
+        test_code = tester_agent._run_llm(test_prompt, step="tester.generate_tests")
         # Save result
         result = {
             "story": story,

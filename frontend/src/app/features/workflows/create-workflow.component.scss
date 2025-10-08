@@ -1,0 +1,89 @@
+.workflow-form {
+  padding: 2rem;
+  
+  .form-group {
+    margin-bottom: 1.5rem;
+    
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: var(--text-color);
+    }
+    
+    .form-control {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius);
+      font-size: 1rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      
+      &:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+      }
+      
+      &.ng-invalid {
+        border-color: #ef4444;
+      }
+    }
+    
+    .form-hint {
+      display: block;
+      margin-top: 0.25rem;
+      font-size: 0.875rem;
+      color: var(--text-color-secondary);
+    }
+    
+    .error-message {
+      margin-top: 0.25rem;
+      font-size: 0.875rem;
+      color: #ef4444;
+    }
+  }
+  
+  .form-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    
+    @media (max-width: 768px) {
+      flex-direction: column;
+      
+      button {
+        width: 100%;
+      }
+    }
+  }
+}
+
+.card-header {
+  padding: 1.5rem 2rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  
+  h2 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-color);
+  }
+  
+  p {
+    margin: 0;
+    color: var(--text-color-secondary);
+    line-height: 1.5;
+  }
+}

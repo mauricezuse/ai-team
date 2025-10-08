@@ -1,0 +1,104 @@
+<div class="card">
+  <div class="card-header">
+    <h2>Create New Workflow</h2>
+    <p>Create a new workflow based on a Jira story. The AI agents will analyze and implement the requirements.</p>
+  </div>
+
+  <form [formGroup]="workflowForm" (ngSubmit)="onSubmit()" class="workflow-form">
+    <div class="form-group">
+      <label for="jira_story_id">Jira Story ID *</label>
+      <input 
+        pInputText 
+        id="jira_story_id"
+        formControlName="jira_story_id"
+        placeholder="e.g., NEGISHI-123"
+        class="form-control"
+        [class.ng-invalid]="workflowForm.get('jira_story_id')?.invalid && workflowForm.get('jira_story_id')?.touched"
+      />
+      <small class="form-hint">Format: PROJECT-123 (e.g., NEGISHI-123)</small>
+      <div *ngIf="workflowForm.get('jira_story_id')?.invalid && workflowForm.get('jira_story_id')?.touched" class="error-message">
+        <div *ngIf="workflowForm.get('jira_story_id')?.errors?.['required']">Jira Story ID is required</div>
+        <div *ngIf="workflowForm.get('jira_story_id')?.errors?.['pattern']">Format must be PROJECT-123</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="jira_story_title">Story Title *</label>
+      <input 
+        pInputText 
+        id="jira_story_title"
+        formControlName="jira_story_title"
+        placeholder="Brief description of the feature or requirement"
+        class="form-control"
+        [class.ng-invalid]="workflowForm.get('jira_story_title')?.invalid && workflowForm.get('jira_story_title')?.touched"
+      />
+      <div *ngIf="workflowForm.get('jira_story_title')?.invalid && workflowForm.get('jira_story_title')?.touched" class="error-message">
+        <div *ngIf="workflowForm.get('jira_story_title')?.errors?.['required']">Story title is required</div>
+        <div *ngIf="workflowForm.get('jira_story_title')?.errors?.['minlength']">Title must be at least 10 characters</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="jira_story_description">Story Description *</label>
+      <textarea 
+        pInputTextarea 
+        id="jira_story_description"
+        formControlName="jira_story_description"
+        placeholder="Detailed description of the requirements, acceptance criteria, and any technical constraints"
+        rows="6"
+        class="form-control"
+        [class.ng-invalid]="workflowForm.get('jira_story_description')?.invalid && workflowForm.get('jira_story_description')?.touched"
+      ></textarea>
+      <div *ngIf="workflowForm.get('jira_story_description')?.invalid && workflowForm.get('jira_story_description')?.touched" class="error-message">
+        <div *ngIf="workflowForm.get('jira_story_description')?.errors?.['required']">Story description is required</div>
+        <div *ngIf="workflowForm.get('jira_story_description')?.errors?.['minlength']">Description must be at least 20 characters</div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="repository_url">Repository URL *</label>
+        <input 
+          pInputText 
+          id="repository_url"
+          formControlName="repository_url"
+          placeholder="https://github.com/owner/repo"
+          class="form-control"
+        />
+        <small class="form-hint">The repository where the implementation will be created</small>
+      </div>
+
+      <div class="form-group">
+        <label for="target_branch">Target Branch *</label>
+        <input 
+          pInputText 
+          id="target_branch"
+          formControlName="target_branch"
+          placeholder="main"
+          class="form-control"
+        />
+        <small class="form-hint">Branch where the changes will be applied</small>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button 
+        pButton 
+        type="button" 
+        label="Cancel" 
+        icon="pi pi-times" 
+        (click)="onCancel()"
+        class="p-button-outlined"
+      ></button>
+      <button 
+        pButton 
+        type="submit" 
+        label="Create Workflow" 
+        icon="pi pi-plus"
+        [disabled]="workflowForm.invalid || loading"
+        [loading]="loading"
+        class="p-button-success"
+      ></button>
+    </div>
+  </form>
+</div>
