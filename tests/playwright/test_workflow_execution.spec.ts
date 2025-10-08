@@ -93,7 +93,7 @@ test.describe('Workflow Execution with Database', () => {
     });
 
     // Navigate to workflow detail page
-    await page.goto('http://localhost:4200/workflows/1');
+    await page.goto('http://localhost:4001/workflows/1');
     await page.waitForLoadState('networkidle');
   });
 

@@ -32,7 +32,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -52,7 +52,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     
     // Should show loading state
     await expect(page.getByTestId('workflows-table')).toBeVisible();
@@ -71,7 +71,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -105,7 +105,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Navigate to create workflow page
@@ -158,7 +158,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflow detail page
-    await page.goto('http://localhost:4200/workflows/1');
+    await page.goto('http://localhost:4001/workflows/1');
     await page.waitForLoadState('networkidle');
     
     // Click execute button
@@ -181,7 +181,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -202,7 +202,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -223,7 +223,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -244,7 +244,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -265,7 +265,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -286,7 +286,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -307,7 +307,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -328,7 +328,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -349,7 +349,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -370,7 +370,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -391,7 +391,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -412,7 +412,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -433,7 +433,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -454,7 +454,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -475,7 +475,7 @@ test.describe('Database Integration and Error Handling', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state

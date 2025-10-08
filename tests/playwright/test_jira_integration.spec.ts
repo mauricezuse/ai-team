@@ -45,7 +45,7 @@ test.describe('Jira Integration Features', () => {
     });
 
     // Navigate to workflows page
-    await page.goto('http://localhost:4200/workflows');
+    await page.goto('http://localhost:4001/workflows');
     await page.waitForLoadState('networkidle');
   });
 

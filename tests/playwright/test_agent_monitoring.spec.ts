@@ -164,7 +164,7 @@ test.describe('Agent Conversation Monitoring', () => {
     });
 
     // Navigate to home and click Workflows in the top menubar for robust routing
-    await page.goto('http://localhost:4200/');
+    await page.goto('http://localhost:4001/');
     await page.waitForLoadState('domcontentloaded');
     // PrimeNG menubar items are menuitem role
     await page.getByRole('menuitem', { name: /Workflows/i }).click({ timeout: 10000 });
