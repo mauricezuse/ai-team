@@ -102,18 +102,41 @@ class JiraService:
         Returns the JSON response or None if the request fails.
         """
         if not self.use_real:
-            logger.info(f"[Stub] Would fetch Jira story: {story_id}")
-            return {"key": story_id, "fields": {"summary": "Stub story summary", "description": "Stub story description"}}
+            logger.error(f"[Jira ERROR] JiraService is configured to use mock data, but production requires real Jira integration.")
+            logger.error(f"[Jira ERROR] Please configure Jira credentials: NEGISHI_JIRA_API_TOKEN, NEGISHI_JIRA_EMAIL, NEGISHI_JIRA_BASE_URL")
+            raise Exception("Production mode requires real Jira integration. Please configure Jira credentials.")
+        
         url = f"{self.base_url}/rest/api/3/issue/{story_id}"
         auth = (self.email, self.token)
         headers = {"Accept": "application/json"}
+        logger.info(f"[Jira] Fetching story: {story_id}")
         logger.debug(f"[Jira DEBUG] GET {url} with auth user: {self.email}")
+        
         try:
-            response = requests.get(url, auth=auth, headers=headers)
+            response = requests.get(url, auth=auth, headers=headers, timeout=30)
             logger.debug(f"[Jira DEBUG] Response status: {response.status_code}")
-            logger.debug(f"[Jira DEBUG] Response content: {response.text}")
+            
+            if response.status_code == 404:
+                logger.error(f"[Jira ERROR] Story {story_id} not found or no permission to access it")
+                return None
+            elif response.status_code == 401:
+                logger.error(f"[Jira ERROR] Authentication failed - check credentials")
+                return None
+            elif response.status_code == 403:
+                logger.error(f"[Jira ERROR] Access forbidden - check permissions")
+                return None
+            
             response.raise_for_status()
-            return response.json()
+            story_data = response.json()
+            logger.info(f"[Jira] Successfully fetched story: {story_id}")
+            return story_data
+            
+        except requests.exceptions.Timeout:
+            logger.error(f"[Jira ERROR] Request timeout for story {story_id}")
+            return None
+        except requests.exceptions.ConnectionError:
+            logger.error(f"[Jira ERROR] Connection error - check network and Jira URL")
+            return None
         except Exception as e:
             logger.error(f"[Jira ERROR] get_story failed: {e}")
             if hasattr(e, 'response') and e.response is not None:
