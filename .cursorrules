@@ -56,6 +56,13 @@ ai-team/
 - **Testing**: Write tests for all new features
 - **Documentation**: Update README/docs for significant changes
 
+### Documentation Requirements
+- **README Updates**: MUST update README.md in any core folder when making changes
+- **Core Folders**: crewai_app/, frontend/, tests/, docs/, repos/
+- **Change Types**: New features, API changes, component changes, test updates
+- **Update Scope**: Reflect new functionality, file changes, and architectural updates
+- **Commit Message**: Include "Update README" in commit message when README is modified
+
 ### Project Cloning Workflow
 - **Target projects**: Always cloned to `/repos/{project-name}`
 - **Never clone**: Projects in root directory
@@ -122,6 +129,13 @@ DATABASE_URL=sqlite:///./ai_team.db
 - **API endpoints**: Test with curl or Postman
 - **Frontend components**: Test with Angular unit tests
 - **Workflow execution**: Test with real Jira integration
+
+### Documentation Maintenance
+- **README Synchronization**: Keep README files synchronized with code changes
+- **Architecture Updates**: Update architecture diagrams when structure changes
+- **API Documentation**: Update API docs when endpoints change
+- **Component Documentation**: Update component docs when UI changes
+- **Test Documentation**: Update test docs when test suites change
 
 ## AI Agent Guidelines
 
@@ -277,6 +291,13 @@ class Model(Base):
 - **Type safety**: Use type hints and interfaces
 - **Testing**: Write tests before implementing features
 
+### Documentation Best Practices
+- **Immediate Updates**: Update README files immediately when making changes
+- **Comprehensive Coverage**: Document all new features, changes, and improvements
+- **Clear Descriptions**: Use clear, descriptive language in documentation
+- **Code Examples**: Include practical code examples in documentation
+- **Version Tracking**: Track documentation changes in commit messages
+
 ### Git Workflow
 - **Branch naming**: Use feature branch names
 - **Commit messages**: Follow prefix conventions
@@ -316,5 +337,48 @@ class Model(Base):
 - **Database performance**: Track query times
 - **Frontend errors**: Monitor console errors
 - **Workflow execution**: Track success rates
+
+## README Update Requirements
+
+### Mandatory README Updates
+When making changes to any core folder, you MUST update the corresponding README.md file:
+
+#### Core Folders and README Files
+- **crewai_app/**: Update `crewai_app/README.md` for backend changes
+- **frontend/**: Update `frontend/README.md` for frontend changes  
+- **tests/**: Update `tests/README.md` for test changes
+- **docs/**: Update `docs/README.md` for documentation changes
+- **repos/**: Update `repos/README.md` for target project changes
+
+#### Change Types Requiring README Updates
+- **New Features**: Document new functionality and usage
+- **API Changes**: Update API endpoint documentation
+- **Component Changes**: Update component structure and usage
+- **Test Updates**: Update test configuration and execution
+- **Architecture Changes**: Update system architecture documentation
+- **Configuration Changes**: Update setup and configuration instructions
+
+#### README Update Checklist
+- [ ] Update overview section if functionality changes
+- [ ] Update directory structure if files are added/moved
+- [ ] Update API documentation if endpoints change
+- [ ] Update component documentation if UI changes
+- [ ] Update test documentation if test structure changes
+- [ ] Update environment variables if configuration changes
+- [ ] Update development instructions if setup changes
+- [ ] Update troubleshooting section if new issues arise
+
+#### Commit Message Format
+When README files are updated, include in commit message:
+```
+MINIONS-xxx: [Description] - Update README
+```
+
+Example:
+```
+MINIONS-1: Add new API endpoint for workflow status - Update README
+MINIONS-2: Fix frontend component styling - Update README
+MINIONS-3: Add new test suite for agent conversations - Update README
+```
 
 Remember: This is a production system handling real Jira stories and generating code. Always test thoroughly and maintain high code quality standards.
