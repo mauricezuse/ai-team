@@ -21,6 +21,7 @@ yarn-error.log*
 
 # Cache and runtime files
 *.db
+ai_team.db
 embedding_cache.json
 
 # Separate projects
