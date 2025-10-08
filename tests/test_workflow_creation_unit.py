@@ -25,10 +25,10 @@ class TestWorkflowCreation:
         """Test successful workflow creation from Jira story."""
         # Mock Jira service to return mock data
         mock_story_data = {
-            "key": "NEGISHI-165",
+            "key": "NEGISHI-167",
             "fields": {
-                "summary": "Implement advanced user authentication system",
-                "description": "Create a comprehensive authentication system with multi-factor authentication, role-based access control, and secure session management."
+                "summary": "Optimize database performance",
+                "description": "Analyze and optimize database queries, add proper indexing, and implement caching strategies."
             }
         }
         
@@ -51,11 +51,11 @@ class TestWorkflowCreation:
                 
                 # Create a mock workflow object
                 mock_workflow = Mock()
-                mock_workflow.id = 1
-                mock_workflow.name = "NEGISHI-165: Implement advanced user authentication system"
-                mock_workflow.jira_story_id = "NEGISHI-165"
-                mock_workflow.jira_story_title = "Implement advanced user authentication system"
-                mock_workflow.jira_story_description = "Create a comprehensive authentication system with multi-factor authentication, role-based access control, and secure session management."
+                mock_workflow.id = 6
+                mock_workflow.name = "NEGISHI-167: Optimize database performance"
+                mock_workflow.jira_story_id = "NEGISHI-167"
+                mock_workflow.jira_story_title = "Optimize database performance"
+                mock_workflow.jira_story_description = "Analyze and optimize database queries, add proper indexing, and implement caching strategies."
                 mock_workflow.status = "pending"
                 mock_workflow.repository_url = "https://github.com/mauricezuse/negishi-freelancing"
                 mock_workflow.target_branch = "main"
@@ -63,13 +63,13 @@ class TestWorkflowCreation:
                 self.mock_db.refresh.return_value = mock_workflow
                 
                 # Make the API call
-                response = self.client.post("/workflows/from-jira/NEGISHI-165")
+                response = self.client.post("/workflows/from-jira/NEGISHI-167")
                 
                 # Assertions
                 assert response.status_code == 200
                 response_data = response.json()
                 assert "message" in response_data
-                assert "NEGISHI-165" in response_data["message"]
+                assert "NEGISHI-167" in response_data["message"]
                 
                 # Verify database operations
                 self.mock_db.add.assert_called_once()

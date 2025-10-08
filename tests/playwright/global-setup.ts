@@ -1,24 +1,18 @@
 import { chromium, FullConfig } from '@playwright/test';
 
 async function globalSetup(config: FullConfig) {
-  console.log('Setting up database tests...');
+  console.log('🔧 Setting up global test environment...');
   
-  // Start backend server if not running
-  const browser = await chromium.launch();
-  const page = await browser.newPage();
-  
+  // Initialize database if needed
   try {
-    // Check if backend is running
-    await page.goto('http://localhost:8000/health', { timeout: 5000 });
-    console.log('Backend server is running');
+    const { init_database } = await import('../../crewai_app/database');
+    init_database();
+    console.log('✅ Database initialized');
   } catch (error) {
-    console.log('Backend server not running, starting it...');
-    // In a real scenario, you would start the backend server here
-    // For now, we'll assume it's started manually
+    console.log('⚠️ Database initialization skipped (not critical for tests)');
   }
   
-  await browser.close();
-  console.log('Database tests setup complete');
+  console.log('✅ Global setup complete');
 }
 
 export default globalSetup;
