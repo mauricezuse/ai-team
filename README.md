@@ -57,14 +57,37 @@ ai-team/
 └── .gitignore
 ```
 
+## Local Development
+
+Backend (FastAPI):
+```
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn crewai_app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Frontend (Angular on port 4001):
+```
+cd frontend
+npm install
+npm run start -- --port 4001
+```
+
+Playwright E2E (points to http://localhost:4001):
+```
+npx playwright install
+npx playwright test --project=chromium
+```
+
 ## Setup
 1. Clone the repo
 2. Create a Python virtual environment
 3. Install dependencies: `pip install -r requirements.txt`
 4. Set up your `.env` file with Azure OpenAI and other secrets
-5. Run locally: `uvicorn crewai_app.main:app --reload`
-6. Build and run with Docker (see Dockerfile)
-7. Deploy to Azure using Bicep/Terraform in `infra/`
+5. Run backend and frontend as above
+6. Run E2E tests as above
+7. See `docs/DEPLOYMENT.md` and `docs/CI_CD.md`
 
 ## Contributing
 - Follow best practices for modular code and clear separation of concerns
