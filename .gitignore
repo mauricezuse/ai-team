@@ -23,6 +23,9 @@ yarn-error.log*
 *.db
 embedding_cache.json
 
+# Separate projects
+negishi-freelancing/
+
 # VSCode
 .vscode/
 
