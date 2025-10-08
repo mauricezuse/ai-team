@@ -69,6 +69,9 @@ class ConversationResponse(BaseModel):
     code_files: List[Dict] = []
     escalations: List[Dict] = []
     collaborations: List[Dict] = []
+    llm_calls: Optional[List[Dict]] = []
+    total_tokens_used: Optional[int] = 0
+    total_cost: Optional[str] = "0.00"
 
     class Config:
         from_attributes = True
@@ -164,6 +167,17 @@ def get_workflow(workflow_id: int, db: Session = Depends(get_db)):
         # Convert agent ID to display name
         agent_display_name = agent_display_names.get(inferred_agent, inferred_agent)
 
+        # Parse LLM calls from JSON if available
+        llm_calls_data = []
+        if conv.llm_calls:
+            try:
+                if isinstance(conv.llm_calls, str):
+                    llm_calls_data = json.loads(conv.llm_calls)
+                else:
+                    llm_calls_data = conv.llm_calls
+            except (json.JSONDecodeError, TypeError):
+                llm_calls_data = []
+
         conv_data = {
             "id": conv.id,
             "step": conv.step or "",
@@ -175,7 +189,10 @@ def get_workflow(workflow_id: int, db: Session = Depends(get_db)):
             "prompt": conv.prompt or "",
             "code_files": [{"filename": cf.filename, "file_path": cf.file_path} for cf in code_files],
             "escalations": [{"from_agent": e.from_agent, "to_agent": e.to_agent, "reason": e.reason, "status": e.status} for e in escalations],
-            "collaborations": [{"from_agent": c.from_agent, "to_agent": c.to_agent, "request_type": c.request_type, "status": c.status} for c in collaborations]
+            "collaborations": [{"from_agent": c.from_agent, "to_agent": c.to_agent, "request_type": c.request_type, "status": c.status} for c in collaborations],
+            "llm_calls": llm_calls_data,
+            "total_tokens_used": conv.total_tokens_used or 0,
+            "total_cost": conv.total_cost or "0.00"
         }
         workflow_data["conversations"].append(conv_data)
     

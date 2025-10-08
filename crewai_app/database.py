@@ -42,6 +42,11 @@ class Conversation(Base):
     output = Column(Text)
     prompt = Column(Text)
     
+    # LLM call tracking
+    llm_calls = Column(JSON, default=list)  # Store array of LLM call objects
+    total_tokens_used = Column(Integer, default=0)
+    total_cost = Column(String, default="0.00")
+    
     # Relationships
     workflow = relationship("Workflow", back_populates="conversations")
     escalations = relationship("Escalation", back_populates="conversation", cascade="all, delete-orphan")
@@ -90,6 +95,24 @@ class Collaboration(Base):
     
     # Relationships
     conversation = relationship("Conversation", back_populates="collaborations")
+
+class LLMCall(Base):
+    __tablename__ = "llm_calls"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"))
+    model = Column(String)  # e.g., "gpt-4", "gpt-3.5-turbo"
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    cost = Column(String, default="0.00")
+    response_time_ms = Column(Integer, default=0)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    request_data = Column(JSON)  # Store the full request for debugging
+    response_data = Column(JSON)  # Store the full response for debugging
+    
+    # Relationships
+    conversation = relationship("Conversation")
 
 # Database functions
 def get_db():

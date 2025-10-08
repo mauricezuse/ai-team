@@ -195,4 +195,10 @@ describe('${filename.split('.')[0]}', () => {
     
     return sampleCode[extension] || `// ${filename}\n// Generated code content would appear here\n// This is a preview of the ${extension} file`;
   }
+
+  getLLMCallHeader(call: any): string {
+    // Create a header for the LLM call accordion tab
+    const timestamp = new Date(call.timestamp).toLocaleTimeString();
+    return `${call.model} - ${call.total_tokens} tokens - $${call.cost} - ${timestamp}`;
+  }
 }
