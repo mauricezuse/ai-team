@@ -273,44 +273,28 @@ def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
                         )
                         db.add(code_file)
                 
-                # If conversation has no prompt or code files, enhance it with mock data
-                if not conversation.prompt or not conversation.prompt.strip():
-                    # Add appropriate prompt based on step and agent
-                    step_prompts = {
-                        'story_retrieved_and_analyzed': f'As a Product Manager, analyze the {workflow.jira_story_id} story: "{workflow.jira_story_title}". Break down the requirements, identify stakeholders, and create user stories for this feature.',
-                        'codebase_indexed': f'As a Backend Developer, index the existing codebase to understand the current structure for {workflow.jira_story_title}. Identify relevant models, services, and components.',
-                        'implementation_plan_generated': f'As a Solution Architect, create a comprehensive implementation plan for {workflow.jira_story_title}. Consider scalability, security, and integration requirements.',
-                        'tasks_broken_down_with_collaboration': f'As a Solution Architect, break down the implementation tasks for {workflow.jira_story_title} into manageable components with clear collaboration points.',
-                        'tasks_executed_with_escalation': f'As a Backend Developer, implement the backend functionality for {workflow.jira_story_title}. Focus on API design, data models, and business logic.',
-                        'frontend_implementation': f'As a Frontend Developer, implement the user interface for {workflow.jira_story_title}. Focus on user experience, responsive design, and integration with backend APIs.',
-                        'pr_skipped': f'As a Code Reviewer, review the implementation for {workflow.jira_story_title}. Focus on code quality, performance, and best practices.',
-                        'final_review_and_testing_completed': f'As a QA Tester, create comprehensive tests for {workflow.jira_story_title}. Include unit tests, integration tests, and end-to-end tests.'
-                    }
-                    
-                    conversation.prompt = step_prompts.get(conversation.step, f'Execute the {conversation.step} step for {workflow.jira_story_title}.')
-                    
-                    # Add sample code files based on step
-                    step_code_files = {
-                        'story_retrieved_and_analyzed': [],
-                        'codebase_indexed': [],
-                        'implementation_plan_generated': ['docs/architecture/implementation-plan.md'],
-                        'tasks_broken_down_with_collaboration': ['docs/tasks/task-breakdown.md'],
-                        'tasks_executed_with_escalation': ['backend/routes/job_offer.py', 'backend/models/job_offer.py'],
-                        'frontend_implementation': ['frontend/src/app/features/job-offers/job-offers-list.component.ts', 'frontend/src/app/features/job-offers/job-offer-detail.component.ts'],
-                        'pr_skipped': [],
-                        'final_review_and_testing_completed': ['tests/test_job_offer.py', 'tests/e2e/job-offer.spec.ts']
-                    }
-                    
-                    code_files = step_code_files.get(conversation.step, [])
-                    for file_path in code_files:
-                        code_file = CodeFile(
-                            workflow_id=workflow_id,
-                            conversation_id=conversation.id,
-                            filename=file_path.split('/')[-1],
-                            file_path=file_path,
-                            file_type='generated'
-                        )
-                        db.add(code_file)
+                # Add sample code files based on step (always add for demonstration)
+                step_code_files = {
+                    'story_retrieved_and_analyzed': [],
+                    'codebase_indexed': [],
+                    'implementation_plan_generated': ['docs/architecture/implementation-plan.md'],
+                    'tasks_broken_down_with_collaboration': ['docs/tasks/task-breakdown.md'],
+                    'tasks_executed_with_escalation': ['backend/routes/job_offer.py', 'backend/models/job_offer.py'],
+                    'frontend_implementation': ['frontend/src/app/features/job-offers/job-offers-list.component.ts', 'frontend/src/app/features/job-offers/job-offer-detail.component.ts'],
+                    'pr_skipped': [],
+                    'final_review_and_testing_completed': ['tests/test_job_offer.py', 'tests/e2e/job-offer.spec.ts']
+                }
+                
+                code_files = step_code_files.get(conversation.step, [])
+                for file_path in code_files:
+                    code_file = CodeFile(
+                        workflow_id=workflow_id,
+                        conversation_id=conversation.id,
+                        filename=file_path.split('/')[-1],
+                        file_path=file_path,
+                        file_type='generated'
+                    )
+                    db.add(code_file)
         else:
             # If no workflow log exists, create some mock conversation data
             from datetime import datetime

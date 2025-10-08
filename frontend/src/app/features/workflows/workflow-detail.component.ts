@@ -156,10 +156,11 @@ export class WorkflowDetailComponent implements OnInit {
   getCodePreview(file: any): string {
     // Generate a code preview based on file type
     const filename = this.getFileDisplayName(file);
-    const extension = filename.split('.').pop()?.toLowerCase();
+    const fileExtension = filename.split('.').pop();
+    const extension = fileExtension ? fileExtension.toLowerCase() : 'txt';
     
     // Sample code content based on file type
-    const sampleCode = {
+    const sampleCode: { [key: string]: string } = {
       'py': `# ${filename}
 def main():
     """Main function for ${filename}"""
@@ -192,6 +193,6 @@ describe('${filename.split('.')[0]}', () => {
 });`
     };
     
-    return sampleCode[extension] || `// ${filename}\n// Generated code content would appear here\n// This is a preview of the ${extension || 'file'} file`;
+    return sampleCode[extension] || `// ${filename}\n// Generated code content would appear here\n// This is a preview of the ${extension} file`;
   }
 }
