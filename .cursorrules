@@ -1,0 +1,253 @@
+# AI Team Project Rules for Cursor
+
+## Project Overview
+This is a production-ready AI orchestration platform using CrewAI for multi-agent collaboration. The system manages workflows, integrates with Jira/GitHub, and generates code for target projects.
+
+## Architecture & Structure
+
+### Core Components
+- **Backend**: FastAPI (Python) on port 8000
+- **Frontend**: Angular on port 4001  
+- **Database**: SQLite with SQLAlchemy ORM
+- **Testing**: Playwright E2E tests
+- **AI Agents**: CrewAI with Azure OpenAI integration
+
+### Directory Structure
+```
+ai-team/
+├── crewai_app/           # Main Python backend
+├── frontend/             # Angular frontend
+├── repos/               # Cloned target projects (git submodules)
+├── tests/               # Test suites
+├── docs/                # Documentation
+└── infra/               # Infrastructure as Code
+```
+
+## Development Guidelines
+
+### Commit Message Standards
+- **AI Team project**: Use `MINIONS-xxx:` prefix
+- **Subprojects in /repos**: Use `NEGISHI-xxx:` prefix
+- **Format**: `MINIONS-123: Brief description of changes`
+- **Examples**:
+  - `MINIONS-1: Fix API serialization for workflow responses`
+  - `MINIONS-2: Add agent filter buttons to frontend`
+  - `MINIONS-3: Update Playwright tests for new features`
+
+### Code Quality Standards
+- **Python**: Follow PEP 8, use type hints, docstrings
+- **TypeScript/Angular**: Use strict mode, proper interfaces
+- **Testing**: Write tests for all new features
+- **Documentation**: Update README/docs for significant changes
+
+### Project Cloning Workflow
+- **Target projects**: Always cloned to `/repos/{project-name}`
+- **Never clone**: Projects in root directory
+- **Use git submodules**: For proper version control
+- **Environment**: Set `NEGISHI_GITHUB_REPO` in `.env`
+
+## Technology Stack
+
+### Backend (Python)
+- **Framework**: FastAPI with Pydantic models
+- **Database**: SQLite with SQLAlchemy ORM
+- **AI**: CrewAI with Azure OpenAI integration
+- **Services**: Jira, GitHub, OpenAI services
+- **Port**: 8000
+
+### Frontend (Angular)
+- **Framework**: Angular with PrimeNG components
+- **Styling**: SCSS with PrimeFlex
+- **Port**: 4001
+- **Proxy**: Routes API calls to backend
+
+### Testing
+- **E2E**: Playwright tests
+- **Unit**: Python pytest
+- **Config**: Desktop-only tests (mobile disabled)
+
+## Environment Configuration
+
+### Required Environment Variables
+```bash
+# Jira Integration
+NEGISHI_JIRA_API_TOKEN=your_token
+NEGISHI_JIRA_EMAIL=your_email
+NEGISHI_JIRA_BASE_URL=https://your-domain.atlassian.net
+
+# GitHub Integration  
+GITHUB_TOKEN=your_token
+NEGISHI_GITHUB_REPO=org/repo
+
+# Azure OpenAI
+AZURE_OPENAI_API_KEY=your_key
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=your-deployment
+
+# Database
+DATABASE_URL=sqlite:///./ai_team.db
+```
+
+## Development Workflow
+
+### Local Development
+1. **Backend**: `uvicorn crewai_app.main:app --reload --host 0.0.0.0 --port 8000`
+2. **Frontend**: `cd frontend && npm run start -- --port 4001`
+3. **Tests**: `npx playwright test --project=chromium`
+
+### Code Changes
+- **Backend changes**: Test with FastAPI endpoints
+- **Frontend changes**: Test with Angular dev server
+- **Database changes**: Update models and migrations
+- **AI agent changes**: Test with real Jira stories
+
+### Testing Requirements
+- **New features**: Must include Playwright E2E tests
+- **API endpoints**: Test with curl or Postman
+- **Frontend components**: Test with Angular unit tests
+- **Workflow execution**: Test with real Jira integration
+
+## AI Agent Guidelines
+
+### Agent Roles
+- **Product Manager**: Story analysis and requirements
+- **Solution Architect**: System design and architecture
+- **Backend Developer**: API and database implementation
+- **Frontend Developer**: UI/UX implementation
+- **QA Tester**: Testing and quality assurance
+- **Code Reviewer**: Code review and optimization
+
+### Workflow Execution
+- **Input**: Jira story ID (e.g., NEGISHI-165)
+- **Process**: Multi-agent collaboration
+- **Output**: Generated code files in `/repos/{project}`
+- **Version Control**: Automatic commits and PRs
+
+## File Organization
+
+### Backend Files
+- `crewai_app/main.py`: FastAPI app and API endpoints
+- `crewai_app/agents/`: Agent role definitions
+- `crewai_app/workflows/`: Workflow orchestration
+- `crewai_app/services/`: External service integrations
+- `crewai_app/models/`: Database models and schemas
+
+### Frontend Files
+- `frontend/src/app/features/workflows/`: Workflow management UI
+- `frontend/src/app/shared/`: Shared components and services
+- `frontend/src/assets/`: Static assets
+
+### Test Files
+- `tests/playwright/`: E2E test suites
+- `tests/test_*.py`: Unit and integration tests
+
+## Common Patterns
+
+### API Response Format
+```python
+{
+    "id": 1,
+    "status": "completed",
+    "conversations": [...],
+    "code_files": [...],
+    "escalations": [...],
+    "collaborations": [...]
+}
+```
+
+### Frontend Component Structure
+```typescript
+@Component({
+  selector: 'app-component',
+  templateUrl: './component.html',
+  styleUrl: './component.scss'
+})
+export class Component implements OnInit {
+  // Component logic
+}
+```
+
+### Database Model Pattern
+```python
+class Model(Base):
+    __tablename__ = "table_name"
+    id = Column(Integer, primary_key=True)
+    # Fields with proper types and constraints
+```
+
+## Debugging & Troubleshooting
+
+### Common Issues
+- **API 500 errors**: Check serialization in main.py
+- **Frontend not loading**: Verify Angular dev server on port 4001
+- **Database errors**: Check SQLAlchemy models and migrations
+- **Jira integration**: Verify credentials and story existence
+- **Git submodules**: Ensure projects clone to /repos folder
+
+### Logging
+- **Backend**: Uses structured logging with context
+- **Frontend**: Console logging for debugging
+- **AI Agents**: Detailed workflow execution logs
+
+## Production Deployment
+
+### Requirements
+- **Environment**: Production-ready with proper secrets
+- **Database**: Persistent storage for workflows
+- **Monitoring**: Logging and error tracking
+- **Security**: API authentication and validation
+
+### Documentation
+- **Setup**: `docs/DEPLOYMENT.md`
+- **CI/CD**: `docs/CI_CD.md`
+- **API**: FastAPI auto-generated docs at `/docs`
+
+## Best Practices
+
+### Code Organization
+- **Modular design**: Separate concerns clearly
+- **Error handling**: Comprehensive try/catch blocks
+- **Type safety**: Use type hints and interfaces
+- **Testing**: Write tests before implementing features
+
+### Git Workflow
+- **Branch naming**: Use feature branch names
+- **Commit messages**: Follow prefix conventions
+- **Pull requests**: Include detailed descriptions
+- **Code review**: Required for all changes
+
+### Performance
+- **Database queries**: Optimize with proper indexing
+- **API responses**: Use pagination for large datasets
+- **Frontend**: Lazy loading and component optimization
+- **Caching**: Implement appropriate caching strategies
+
+## Security Considerations
+
+### API Security
+- **Input validation**: Use Pydantic models
+- **Authentication**: Implement proper auth mechanisms
+- **Rate limiting**: Prevent API abuse
+- **CORS**: Configure for frontend access
+
+### Data Protection
+- **Secrets management**: Use environment variables
+- **Database security**: Proper access controls
+- **Logging**: Avoid logging sensitive data
+- **Dependencies**: Keep packages updated
+
+## Maintenance
+
+### Regular Tasks
+- **Dependency updates**: Keep packages current
+- **Database cleanup**: Remove old workflow data
+- **Log rotation**: Manage log file sizes
+- **Performance monitoring**: Track system metrics
+
+### Monitoring
+- **API health**: Monitor endpoint responses
+- **Database performance**: Track query times
+- **Frontend errors**: Monitor console errors
+- **Workflow execution**: Track success rates
+
+Remember: This is a production system handling real Jira stories and generating code. Always test thoroughly and maintain high code quality standards.
