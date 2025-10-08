@@ -118,17 +118,122 @@ DATABASE_URL=sqlite:///./ai_team.db
 2. **Frontend**: `cd frontend && npm run start -- --port 4001`
 3. **Tests**: `npx playwright test --project=chromium`
 
+### Development Workflow with Playwright
+1. **Make UI Changes**: Implement frontend modifications
+2. **Create Tests**: Write Playwright tests for the changes
+3. **Run Tests**: Execute `npx playwright test` to verify functionality
+4. **Fix Issues**: Address any test failures
+5. **Commit Changes**: Include both code and test changes in commits
+6. **Documentation**: Update README files as required
+
 ### Code Changes
 - **Backend changes**: Test with FastAPI endpoints
-- **Frontend changes**: Test with Angular dev server
+- **Frontend changes**: Test with Angular dev server + MANDATORY Playwright tests
 - **Database changes**: Update models and migrations
 - **AI agent changes**: Test with real Jira stories
+- **UI/UX changes**: ALWAYS create Playwright tests for any frontend modification
 
 ### Testing Requirements
 - **New features**: Must include Playwright E2E tests
 - **API endpoints**: Test with curl or Postman
 - **Frontend components**: Test with Angular unit tests
 - **Workflow execution**: Test with real Jira integration
+
+### Playwright Testing Requirements
+- **MANDATORY**: Create Playwright tests for ALL UI changes and new features
+- **UI Changes**: Every frontend component modification requires E2E test coverage
+- **New Features**: All new UI features must have corresponding Playwright tests
+- **Component Updates**: Any changes to existing components need test updates
+- **User Interactions**: Test all user interactions (clicks, forms, navigation)
+- **Visual Elements**: Test that UI elements are visible and functional
+- **Data Display**: Test that data is properly displayed and formatted
+- **Error Handling**: Test error states and edge cases
+- **Responsive Design**: Test on different screen sizes (desktop focus)
+- **Accessibility**: Test keyboard navigation and screen reader compatibility
+
+### When Playwright Tests Are MANDATORY
+- **New Components**: Any new Angular component requires E2E test
+- **Component Modifications**: Changes to existing components need test updates
+- **UI/UX Changes**: Any visual or interaction changes require tests
+- **New Features**: All new frontend features must have tests
+- **Bug Fixes**: UI bug fixes require test coverage
+- **Styling Changes**: CSS/SCSS changes that affect functionality need tests
+- **Form Updates**: Any form modifications require test coverage
+- **Navigation Changes**: Route or navigation updates need tests
+- **Data Display**: Changes to how data is shown require tests
+- **User Workflows**: Any new user workflow requires end-to-end testing
+
+### Playwright Test Structure
+- **Test Files**: Create `test_[feature_name].spec.ts` for each feature
+- **Test Organization**: Group related tests in describe blocks
+- **Test Naming**: Use descriptive test names that explain the functionality
+- **Data Test IDs**: Use `data-testid` attributes for reliable element selection
+- **Page Objects**: Create reusable page object patterns for complex components
+- **Mock Data**: Use consistent mock data for predictable test results
+- **Test Isolation**: Each test should be independent and not rely on other tests
+- **Cleanup**: Clean up test data after each test run
+- **Parallel Execution**: Tests should be able to run in parallel safely
+
+### Playwright Test Examples
+```typescript
+// Example: Testing a new workflow creation feature
+test('should create new workflow with Jira story', async ({ page }) => {
+  await page.goto('/workflows');
+  await page.click('[data-testid="create-workflow-btn"]');
+  await page.fill('[data-testid="jira-story-input"]', 'NEGISHI-165');
+  await page.click('[data-testid="create-btn"]');
+  await expect(page.locator('[data-testid="workflow-card"]')).toBeVisible();
+});
+
+// Example: Testing expandable code files
+test('should display expandable code files in workflow detail', async ({ page }) => {
+  await page.goto('/workflows/1');
+  await page.click('[data-testid="code-file-accordion"]');
+  await expect(page.locator('[data-testid="code-preview"]')).toBeVisible();
+});
+```
+
+### Playwright Test Checklist
+- [ ] Test file created for new UI feature
+- [ ] All user interactions tested
+- [ ] Data display verified
+- [ ] Error states handled
+- [ ] Responsive design tested
+- [ ] Accessibility considered
+- [ ] Test data cleaned up
+- [ ] Test runs independently
+- [ ] Test passes consistently
+- [ ] Documentation updated
+
+### Playwright Test Best Practices
+- **Test Data**: Use consistent mock data for predictable results
+- **Element Selection**: Use `data-testid` attributes for reliable element targeting
+- **Wait Strategies**: Use proper wait conditions instead of hard timeouts
+- **Test Isolation**: Each test should be independent and not affect others
+- **Error Handling**: Test both success and failure scenarios
+- **Performance**: Keep tests fast and efficient
+- **Maintainability**: Write clear, readable test code
+- **Documentation**: Comment complex test logic
+- **Version Control**: Include test files in commits with code changes
+- **CI/CD Integration**: Ensure tests run in automated pipelines
+
+### Playwright Test Commands
+```bash
+# Run all tests
+npx playwright test
+
+# Run specific test file
+npx playwright test test_workflow_creation.spec.ts
+
+# Run tests in headed mode (see browser)
+npx playwright test --headed
+
+# Run tests in debug mode
+npx playwright test --debug
+
+# Generate test report
+npx playwright show-report
+```
 
 ### Documentation Maintenance
 - **README Synchronization**: Keep README files synchronized with code changes
