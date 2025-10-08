@@ -48,10 +48,16 @@ crewai_app/
 
 ### Workflow Management
 - `GET /workflows` - List all workflows
-- `GET /workflows/{id}` - Get specific workflow
+- `GET /workflows/{id}` - Get specific workflow with conversations and code files
 - `POST /workflows` - Create new workflow
 - `DELETE /workflows/{id}` - Delete workflow
-- `POST /workflows/{id}/execute` - Execute workflow
+- `POST /workflows/{id}/execute` - Execute workflow with AI agents
+
+### Workflow Execution
+- **Enhanced Conversations**: Each conversation includes detailed prompts and agent instructions
+- **Code Files**: Generated code files are linked to specific conversations
+- **Agent Collaboration**: Multi-agent workflow with Product Manager, Architect, Developer, Tester, and Reviewer
+- **Real-time Updates**: Workflow status updates as agents complete their tasks
 
 ### Health & Status
 - `GET /health` - Health check endpoint
