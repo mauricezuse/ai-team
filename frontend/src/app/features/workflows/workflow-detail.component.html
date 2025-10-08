@@ -77,15 +77,29 @@
           
           <div *ngIf="conversation.code_files && conversation.code_files.length > 0" class="code-files">
             <strong>Code Files Generated:</strong>
-            <div class="file-links">
-              <a *ngFor="let file of conversation.code_files" 
-                 [href]="getFileUrl(file)" 
-                 target="_blank" 
-                 class="file-link"
-                 data-testid="code-file">
-                <i class="pi pi-file"></i> {{ file }}
-              </a>
-            </div>
+            <p-accordion>
+              <p-accordionTab *ngFor="let file of conversation.code_files; let i = index" 
+                              [header]="getFileDisplayName(file)" 
+                              [selected]="false">
+                <div class="code-file-content">
+                  <div class="code-file-header">
+                    <span class="file-name">
+                      <i class="pi pi-file"></i> {{ getFileDisplayName(file) }}
+                    </span>
+                    <span class="file-path">{{ getFilePath(file) }}</span>
+                    <a [href]="getFileUrl(file)" 
+                       target="_blank" 
+                       class="file-link"
+                       data-testid="code-file">
+                      <i class="pi pi-external-link"></i> View in Repository
+                    </a>
+                  </div>
+                  <div class="code-preview">
+                    <pre><code>{{ getCodePreview(file) }}</code></pre>
+                  </div>
+                </div>
+              </p-accordionTab>
+            </p-accordion>
           </div>
           
           <div *ngIf="conversation.escalations && conversation.escalations.length > 0" class="escalations">

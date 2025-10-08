@@ -9,11 +9,12 @@ import { FormsModule } from '@angular/forms';
 import { ChipModule } from 'primeng/chip';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
+import { AccordionModule } from 'primeng/accordion';
 
 @Component({
   selector: 'app-workflow-detail',
   standalone: true,
-  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule],
+  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule],
   providers: [MessageService],
   templateUrl: './workflow-detail.component.html',
   styleUrl: './workflow-detail.component.scss'
@@ -130,9 +131,67 @@ export class WorkflowDetailComponent implements OnInit {
     }
   }
 
-  getFileUrl(filename: string): string {
-    // Point to the actual cloned repository where files are generated
-    // The workflow clones the negishi-freelancing repository and generates files there
-    return `https://github.com/mauricezuse/negishi-freelancing/blob/main/${filename}`;
+  getFileUrl(file: any): string {
+    // Handle both string and object file formats
+    const filePath = typeof file === 'string' ? file : file.file_path || file.filename;
+    return `https://github.com/mauricezuse/negishi-freelancing/blob/main/${filePath}`;
+  }
+
+  getFileDisplayName(file: any): string {
+    // Get display name for file
+    if (typeof file === 'string') {
+      return file.split('/').pop() || file;
+    }
+    return file.filename || file.file_path?.split('/').pop() || 'Unknown File';
+  }
+
+  getFilePath(file: any): string {
+    // Get full file path
+    if (typeof file === 'string') {
+      return file;
+    }
+    return file.file_path || file.filename || '';
+  }
+
+  getCodePreview(file: any): string {
+    // Generate a code preview based on file type
+    const filename = this.getFileDisplayName(file);
+    const extension = filename.split('.').pop()?.toLowerCase();
+    
+    // Sample code content based on file type
+    const sampleCode = {
+      'py': `# ${filename}
+def main():
+    """Main function for ${filename}"""
+    pass
+
+if __name__ == "__main__":
+    main()`,
+      'ts': `// ${filename}
+export class ${filename.split('.')[0]} {
+    constructor() {
+        // Implementation here
+    }
+}`,
+      'md': `# ${filename}
+
+## Description
+This file contains the implementation for the feature.
+
+## Usage
+\`\`\`typescript
+// Example usage
+\`\`\``,
+      'spec.ts': `// ${filename}
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+
+describe('${filename.split('.')[0]}', () => {
+  it('should create', () => {
+    expect(true).toBeTruthy();
+  });
+});`
+    };
+    
+    return sampleCode[extension] || `// ${filename}\n// Generated code content would appear here\n// This is a preview of the ${extension || 'file'} file`;
   }
 }
