@@ -15,12 +15,28 @@ This is a production-ready AI orchestration platform using CrewAI for multi-agen
 ### Directory Structure
 ```
 ai-team/
-├── crewai_app/           # Main Python backend
-├── frontend/             # Angular frontend
+├── crewai_app/           # Main Python backend (FastAPI + CrewAI)
+│   ├── agents/          # AI agent role definitions
+│   ├── workflows/       # Workflow orchestration logic
+│   ├── services/        # External service integrations
+│   ├── models/          # Database models and schemas
+│   └── utils/           # Utility functions and logging
+├── frontend/             # Angular frontend (port 4001)
+│   ├── src/app/features/ # Feature modules (workflows, agents, dashboard)
+│   ├── src/app/shared/   # Shared components and services
+│   └── src/assets/       # Static assets and styles
 ├── repos/               # Cloned target projects (git submodules)
-├── tests/               # Test suites
-├── docs/                # Documentation
+│   └── {project-name}/  # Each project the AI team works on
+├── tests/               # Comprehensive test suites
+│   ├── playwright/      # E2E tests with Playwright
+│   └── test_*.py        # Unit and integration tests
+├── docs/                # Project documentation
+│   ├── DEPLOYMENT.md    # Production deployment guide
+│   ├── CI_CD.md         # CI/CD pipeline documentation
+│   └── README.md        # Documentation overview
 └── infra/               # Infrastructure as Code
+    ├── bicep/           # Azure Bicep templates
+    └── terraform/       # Terraform scripts
 ```
 
 ## Development Guidelines
@@ -125,21 +141,72 @@ DATABASE_URL=sqlite:///./ai_team.db
 
 ## File Organization
 
-### Backend Files
-- `crewai_app/main.py`: FastAPI app and API endpoints
-- `crewai_app/agents/`: Agent role definitions
-- `crewai_app/workflows/`: Workflow orchestration
-- `crewai_app/services/`: External service integrations
-- `crewai_app/models/`: Database models and schemas
+### Backend Files (crewai_app/)
+- `main.py`: FastAPI app with all API endpoints and workflow execution
+- `database.py`: Database models, connection management, and migrations
+- `config.py`: Application configuration and environment variables
+- `agents/`: AI agent role definitions and implementations
+  - `pm.py`: Product Manager agent for story analysis
+  - `architect.py`: Solution Architect agent for system design
+  - `developer.py`: Backend Developer agent for implementation
+  - `frontend.py`: Frontend Developer agent for UI implementation
+  - `tester.py`: QA Tester agent for test creation
+  - `reviewer.py`: Code Reviewer agent for code optimization
+- `workflows/`: Workflow orchestration and execution logic
+  - `story_implementation_workflow.py`: Main workflow implementation
+  - `enhanced_story_workflow.py`: Enhanced workflow with advanced features
+- `services/`: External service integrations
+  - `jira_service.py`: Jira API integration for story retrieval
+  - `github_service.py`: GitHub API integration for repository operations
+  - `openai_service.py`: Azure OpenAI integration for AI agents
+- `models/`: Database models and Pydantic schemas
+  - `workflow.py`: Workflow database model
+  - `conversation.py`: Conversation database model
+  - `code_file.py`: Code file database model
+- `utils/`: Utility functions and helpers
+  - `logger.py`: Logging configuration and utilities
+  - `helpers.py`: Common helper functions
 
-### Frontend Files
-- `frontend/src/app/features/workflows/`: Workflow management UI
-- `frontend/src/app/shared/`: Shared components and services
-- `frontend/src/assets/`: Static assets
+### Frontend Files (frontend/)
+- `src/app/features/`: Feature modules for different application areas
+  - `workflows/`: Workflow management UI components
+    - `workflows-list.component.*`: Workflow listing and management
+    - `workflow-detail.component.*`: Individual workflow details
+    - `workflow-create.component.*`: Workflow creation interface
+  - `agents/`: Agent monitoring and management
+    - `agent-conversation.component.*`: Agent conversation display
+    - `agent-filter.component.*`: Agent filtering controls
+  - `dashboard/`: System dashboard and overview
+- `src/app/shared/`: Shared components and services
+  - `components/`: Reusable UI components
+  - `services/`: Angular services for API communication
+  - `models/`: TypeScript interfaces and models
+- `src/assets/`: Static assets, images, and global styles
+- `angular.json`: Angular CLI configuration
+- `proxy.conf.json`: API proxy configuration for development
 
-### Test Files
-- `tests/playwright/`: E2E test suites
-- `tests/test_*.py`: Unit and integration tests
+### Test Files (tests/)
+- `playwright/`: End-to-end test suites using Playwright
+  - `test_workflow_creation.spec.ts`: Workflow creation tests
+  - `test_workflow_execution.spec.ts`: Workflow execution tests
+  - `test_agent_conversations.spec.ts`: Agent conversation tests
+  - `test_negishi_165.spec.ts`: Specific workflow test
+  - `playwright.config.ts`: Playwright configuration
+- `test_*.py`: Python unit and integration tests
+  - `test_workflow_creation_unit.py`: Unit tests for workflow creation
+  - `test_workflow_creation_integration.py`: Integration tests
+- `global-setup.ts`: Global test setup and configuration
+
+### Documentation Files (docs/)
+- `DEPLOYMENT.md`: Production deployment guide and procedures
+- `CI_CD.md`: Continuous integration and deployment documentation
+- `README.md`: Documentation overview and structure
+
+### Target Projects (repos/)
+- `{project-name}/`: Cloned target projects managed as git submodules
+  - Each project contains code generated by AI agents
+  - Maintains separate git history and version control
+  - Feature branches created for each workflow execution
 
 ## Common Patterns
 
