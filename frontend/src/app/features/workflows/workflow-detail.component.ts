@@ -58,7 +58,7 @@ export class WorkflowDetailComponent implements OnInit {
 
   initializeConversations() {
     if (this.workflow?.conversations) {
-      // Add expanded property to each conversation
+      // Add expanded property to each conversation - expand by default
       this.workflow.conversations.forEach((conversation: any) => {
         conversation.expanded = true;
       });
@@ -82,6 +82,11 @@ export class WorkflowDetailComponent implements OnInit {
       
       return matchesSearch && matchesAgent;
     });
+  }
+
+  filterByAgent(agentName: string) {
+    this.selectedAgent = agentName;
+    this.filterConversations();
   }
 
   toggleConversation(conversation: any) {

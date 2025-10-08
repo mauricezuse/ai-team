@@ -30,6 +30,14 @@
       <input type="text" pInputText placeholder="Search conversations..." 
              [(ngModel)]="searchTerm" (input)="filterConversations()" class="search-input">
       <p-dropdown [options]="agentOptions" optionLabel="label" optionValue="value" [(ngModel)]="selectedAgent" (onChange)="filterConversations()" placeholder="All Agents"></p-dropdown>
+      <div class="agent-filter-buttons">
+        <button pButton type="button" label="All" (click)="filterByAgent('')" class="p-button-sm p-button-outlined"></button>
+        <button pButton type="button" label="Product Manager" (click)="filterByAgent('Product Manager')" class="p-button-sm p-button-outlined"></button>
+        <button pButton type="button" label="Solution Architect" (click)="filterByAgent('Solution Architect')" class="p-button-sm p-button-outlined"></button>
+        <button pButton type="button" label="Backend Developer" (click)="filterByAgent('Backend Developer')" class="p-button-sm p-button-outlined"></button>
+        <button pButton type="button" label="Frontend Developer" (click)="filterByAgent('Frontend Developer')" class="p-button-sm p-button-outlined"></button>
+        <button pButton type="button" label="QA Tester" (click)="filterByAgent('QA Tester')" class="p-button-sm p-button-outlined"></button>
+      </div>
     </div>
     
     <div class="conversations-list">
