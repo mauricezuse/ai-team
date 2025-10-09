@@ -4,6 +4,7 @@ test.describe('Execution Workflow', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to workflow 12 detail page
     await page.goto('/workflows/12');
+    await page.waitForLoadState('networkidle');
     await expect(page.locator('[data-testid="workflow-detail"]')).toBeVisible();
   });
 
@@ -21,8 +22,8 @@ test.describe('Execution Workflow', () => {
     // Click the Start New Execution button
     await page.click('[data-testid="start-execution"]');
     
-    // Wait for success message
-    await expect(page.locator('.p-toast-message')).toContainText('Execution started');
+    // Wait for success message (use first toast message)
+    await expect(page.locator('.p-toast-message').first()).toContainText('Execution started');
     
     // Check that executions table is updated
     await expect(page.locator('.executions table')).toBeVisible();
@@ -32,16 +33,18 @@ test.describe('Execution Workflow', () => {
     // Wait for executions to load
     await page.waitForSelector('.executions table', { timeout: 10000 });
     
-    // Check table headers
+    // Check table headers (actual headers: ID, Status, Started, Finished, Calls, Tokens, Cost)
     await expect(page.locator('.executions th').first()).toContainText('ID');
     await expect(page.locator('.executions th').nth(1)).toContainText('Status');
     await expect(page.locator('.executions th').nth(2)).toContainText('Started');
-    await expect(page.locator('.executions th').nth(3)).toContainText('Calls');
-    await expect(page.locator('.executions th').nth(4)).toContainText('Tokens');
-    await expect(page.locator('.executions th').nth(5)).toContainText('Cost');
+    await expect(page.locator('.executions th').nth(3)).toContainText('Finished');
+    await expect(page.locator('.executions th').nth(4)).toContainText('Calls');
+    await expect(page.locator('.executions th').nth(5)).toContainText('Tokens');
+    await expect(page.locator('.executions th').nth(6)).toContainText('Cost');
     
     // Check that at least one execution row exists
-    await expect(page.locator('.executions tbody tr')).toHaveCount({ min: 1 });
+    const rowCount = await page.locator('.executions tbody tr').count();
+    expect(rowCount).toBeGreaterThanOrEqual(1);
   });
 
   test('should navigate to advanced view and show execution comparison', async ({ page }) => {
@@ -107,7 +110,8 @@ test.describe('Execution Workflow', () => {
     
     if (hasExecutions) {
       // Check that execution dropdowns have options
-      await expect(page.locator('select option')).toHaveCount({ min: 1 });
+      const optionCount = await page.locator('select option').count();
+      expect(optionCount).toBeGreaterThanOrEqual(1);
       
       // Check that compare button is present
       await expect(page.locator('button:has-text("Compare")')).toBeVisible();
@@ -130,8 +134,8 @@ test.describe('Execution Workflow', () => {
     // Click the Start New Execution button
     await page.click('[data-testid="start-execution"]');
     
-    // Check for error message
-    await expect(page.locator('.p-toast-message')).toContainText('Failed to start execution');
+    // Check for error message (use last toast message for error)
+    await expect(page.locator('.p-toast-message').last()).toContainText('Failed to start execution');
   });
 
   test('should refresh executions after starting new execution', async ({ page }) => {
@@ -141,8 +145,8 @@ test.describe('Execution Workflow', () => {
     // Start new execution
     await page.click('[data-testid="start-execution"]');
     
-    // Wait for success message
-    await expect(page.locator('.p-toast-message')).toContainText('Execution started');
+    // Wait for success message (use first toast message)
+    await expect(page.locator('.p-toast-message').first()).toContainText('Execution started');
     
     // Wait for page to refresh and check that executions table is updated
     await page.waitForTimeout(2000); // Allow time for refresh
@@ -168,10 +172,10 @@ test.describe('Execution Workflow', () => {
     // Wait for executions to load
     await page.waitForSelector('.executions table', { timeout: 10000 });
     
-    // Check that numeric metrics are displayed
-    const callsCells = await page.locator('.executions tbody tr td:nth-child(4)').all();
-    const tokensCells = await page.locator('.executions tbody tr td:nth-child(5)').all();
-    const costCells = await page.locator('.executions tbody tr td:nth-child(6)').all();
+    // Check that numeric metrics are displayed (columns: ID, Status, Started, Finished, Calls, Tokens, Cost)
+    const callsCells = await page.locator('.executions tbody tr td:nth-child(5)').all();
+    const tokensCells = await page.locator('.executions tbody tr td:nth-child(6)').all();
+    const costCells = await page.locator('.executions tbody tr td:nth-child(7)').all();
     
     // Check that metrics contain numeric values
     for (const cell of callsCells) {
