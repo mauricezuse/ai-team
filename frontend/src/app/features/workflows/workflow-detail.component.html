@@ -19,6 +19,8 @@
       <a [routerLink]="['/workflows', workflow.id, 'advanced']" class="p-button p-button-outlined" data-testid="advanced-view-link">
         Advanced View
       </a>
+      &nbsp;
+      <button pButton type="button" label="Start New Execution" icon="pi pi-play" class="p-button-info" (click)="startNewExecution()" data-testid="start-execution"></button>
     </p>
   </div>
 
@@ -27,6 +29,36 @@
     <div class="agent-chips">
       <span *ngFor="let agent of workflow.agents" class="p-chip">{{ agent }}</span>
     </div>
+  </div>
+
+  <div class="executions" *ngIf="workflow?.executions?.length >= 0">
+    <h3>Executions</h3>
+    <table class="p-datatable-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Status</th>
+          <th>Started</th>
+          <th>Finished</th>
+          <th>Calls</th>
+          <th>Tokens</th>
+          <th>Cost</th>
+          <th>Avg Latency</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let ex of workflow.executions">
+          <td>{{ ex.id }}</td>
+          <td>{{ ex.status }}</td>
+          <td>{{ ex.started_at | date:'short' }}</td>
+          <td>{{ ex.finished_at | date:'short' }}</td>
+          <td>{{ ex.total_calls }}</td>
+          <td>{{ ex.total_tokens }}</td>
+          <td>{{ ex.total_cost }}</td>
+          <td>{{ ex.avg_latency_ms }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <div *ngIf="workflow.conversations && workflow.conversations.length > 0" class="conversations-section" data-testid="conversations">

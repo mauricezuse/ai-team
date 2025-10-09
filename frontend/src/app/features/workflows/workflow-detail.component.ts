@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { WorkflowService } from '../../core/services/workflow.service';
+import { WorkflowAdvancedService } from '../../core/services/workflow-advanced.service';
 import { CommonModule } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -30,6 +31,7 @@ export class WorkflowDetailComponent implements OnInit {
   constructor(
     private route: ActivatedRoute, 
     private workflowService: WorkflowService,
+    private advancedService: WorkflowAdvancedService,
     private messageService: MessageService
   ) {}
 
@@ -44,6 +46,10 @@ export class WorkflowDetailComponent implements OnInit {
     this.workflowService.getWorkflow(id).subscribe({
       next: (workflow) => {
         this.workflow = workflow;
+        // Attach executions list
+        this.advancedService.listExecutions(String(workflow.id)).subscribe(execs => {
+          this.workflow.executions = execs || [];
+        });
         this.initializeConversations();
       },
       error: (error) => {
@@ -138,6 +144,18 @@ export class WorkflowDetailComponent implements OnInit {
           detail: 'Error executing workflow'
         });
       }
+    });
+  }
+
+  startNewExecution() {
+    if (!this.workflow) return;
+    this.messageService.add({ severity: 'info', summary: 'Starting', detail: 'Starting new execution...' });
+    this.advancedService.startExecution(String(this.workflow.id)).subscribe({
+      next: (ex) => {
+        this.messageService.add({ severity: 'success', summary: 'Execution started', detail: `Execution #${ex.id}` });
+        this.refreshWorkflow();
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to start execution' })
     });
   }
 
