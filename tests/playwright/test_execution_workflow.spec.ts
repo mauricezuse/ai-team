@@ -22,8 +22,8 @@ test.describe('Execution Workflow', () => {
     // Click the Start New Execution button
     await page.click('[data-testid="start-execution"]');
     
-    // Wait for success message (use first toast message)
-    await expect(page.locator('.p-toast-message').first()).toContainText('Execution started');
+    // Wait for success message (wait for the success toast specifically)
+    await expect(page.locator('.p-toast-message').filter({ hasText: 'Execution started' })).toBeVisible();
     
     // Check that executions table is updated
     await expect(page.locator('.executions table')).toBeVisible();
@@ -67,7 +67,7 @@ test.describe('Execution Workflow', () => {
     await expect(page.locator('[data-testid="run-comparison"]')).toBeVisible();
     
     // Wait for executions to load
-    await page.waitForSelector('select option', { timeout: 10000 });
+    await page.waitForLoadState('networkidle');
     
     // Select two different executions if available
     const execAOptions = await page.locator('select').first().locator('option').count();
@@ -145,8 +145,8 @@ test.describe('Execution Workflow', () => {
     // Start new execution
     await page.click('[data-testid="start-execution"]');
     
-    // Wait for success message (use first toast message)
-    await expect(page.locator('.p-toast-message').first()).toContainText('Execution started');
+    // Wait for success message (wait for the success toast specifically)
+    await expect(page.locator('.p-toast-message').filter({ hasText: 'Execution started' })).toBeVisible();
     
     // Wait for page to refresh and check that executions table is updated
     await page.waitForTimeout(2000); // Allow time for refresh
