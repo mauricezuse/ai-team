@@ -187,7 +187,20 @@ class ArchitectAgent:
     def _prompt_hash(self, prompt):
         return hashlib.sha256(prompt.encode('utf-8')).hexdigest()
 
-    def select_relevant_files(self, story, pm_suggestions, codebase_index):
+    def _run_llm(self, prompt: str, step: str, workflow_id=None, conversation_id=None, **kwargs):
+        """Run LLM with tracking for architect agent. Ignores unknown kwargs like max_tokens safely."""
+        safe_args = {
+            'workflow_id': workflow_id,
+            'conversation_id': conversation_id,
+            'step': step
+        }
+        if 'max_tokens' in kwargs and isinstance(kwargs.get('max_tokens'), int):
+            safe_args['max_tokens'] = kwargs['max_tokens']
+        if 'deployment' in kwargs:
+            safe_args['deployment'] = kwargs['deployment']
+        return self.llm_service.generate(prompt, **safe_args)
+
+    def select_relevant_files(self, story, pm_suggestions, codebase_index, workflow_id=None, conversation_id=None):
         description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
         summary = story['fields'].get('summary', '') if isinstance(story, dict) else ''
         description = str(description)[:250]
@@ -204,7 +217,13 @@ class ArchitectAgent:
         deployment = get_next_deployment()
         logger.info(f"[ArchitectAgent] Using deployment: {deployment} for select_relevant_files")
         try:
-            result = self.llm_service.generate(prompt, deployment=deployment, step="select_relevant_files")
+            result = self.llm_service.generate(
+                prompt, 
+                deployment=deployment, 
+                step="select_relevant_files",
+                workflow_id=workflow_id,
+                conversation_id=conversation_id
+            )
             self._cache_set(prompt_hash, result)
             return result
         except Exception as e:
@@ -213,7 +232,7 @@ class ArchitectAgent:
             self._cache_set(prompt_hash, fallback)
             return fallback
 
-    def generate_backend_plan(self, story, pm_suggestions, selected_index):
+    def generate_backend_plan(self, story, pm_suggestions, selected_index, workflow_id=None, conversation_id=None):
         import json
         description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
         summary = story['fields'].get('summary', '') if isinstance(story, dict) else ''
@@ -232,7 +251,14 @@ class ArchitectAgent:
         logger.info(f"[ArchitectAgent] Using deployment: {deployment} for generate_backend_plan")
         
         try:
-            result = self.llm_service.generate(prompt, deployment=deployment, step="dev_agents.backend_plan", max_tokens=1000)
+            result = self.llm_service.generate(
+                prompt, 
+                deployment=deployment, 
+                step="dev_agents.backend_plan", 
+                max_tokens=1000,
+                workflow_id=workflow_id,
+                conversation_id=conversation_id
+            )
             self.last_llm_output = result
             
             # Validate and fix JSON
@@ -258,7 +284,7 @@ class ArchitectAgent:
             logger.error(f"[ArchitectAgent] Error generating backend plan: {e}")
             return []
 
-    def generate_frontend_plan(self, story, pm_suggestions, selected_index):
+    def generate_frontend_plan(self, story, pm_suggestions, selected_index, workflow_id=None, conversation_id=None):
         import json
         
         description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
@@ -278,7 +304,14 @@ class ArchitectAgent:
         try:
             deployment = get_next_deployment()
             logger.info(f"[ArchitectAgent] Using deployment: {deployment} for generate_frontend_plan")
-            llm_output = self.llm_service.generate(prompt, deployment=deployment, step="dev_agents.frontend_plan", max_tokens=1000)
+            llm_output = self.llm_service.generate(
+                prompt, 
+                deployment=deployment, 
+                step="dev_agents.frontend_plan", 
+                max_tokens=1000,
+                workflow_id=workflow_id,
+                conversation_id=conversation_id
+            )
             self.last_llm_output = llm_output
             
             # Validate and fix JSON
@@ -323,7 +356,7 @@ class ArchitectAgent:
             }
             return [fallback_task]
 
-    def generate_api_contracts(self, story, pm_suggestions, selected_index):
+    def generate_api_contracts(self, story, pm_suggestions, selected_index, workflow_id=None, conversation_id=None):
         import json
         
         description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
@@ -363,7 +396,14 @@ class ArchitectAgent:
         try:
             deployment = get_next_deployment()
             logger.info(f"[ArchitectAgent] Using deployment: {deployment} for generate_api_contracts")
-            llm_output = self.llm_service.generate(prompt, deployment=deployment, step="dev_agents.api_contracts", max_tokens=1000)
+            llm_output = self.llm_service.generate(
+                prompt, 
+                deployment=deployment, 
+                step="dev_agents.api_contracts", 
+                max_tokens=1000,
+                workflow_id=workflow_id,
+                conversation_id=conversation_id
+            )
             self.last_llm_output = llm_output
             
             # Validate and fix JSON
@@ -394,7 +434,7 @@ class ArchitectAgent:
                 }
             }
 
-    def review_and_plan(self, story, pm_suggestions, selected_index):
+    def review_and_plan(self, story, pm_suggestions, selected_index, workflow_id=None, conversation_id=None):
         """
         Generate a machine-parseable implementation plan for dev agents in three LLM calls: backend, frontend, and API/data contracts.
         """
@@ -409,7 +449,7 @@ class ArchitectAgent:
         
         # Backend
         try:
-            backend_result = self.generate_backend_plan(story, pm_suggestions, selected_index)
+            backend_result = self.generate_backend_plan(story, pm_suggestions, selected_index, workflow_id, conversation_id)
             plan['Backend Implementation Plan'] = backend_result
         except Exception as e:
             logger.error(f"[ArchitectAgent] Failed to generate backend plan: {e}")
@@ -417,7 +457,7 @@ class ArchitectAgent:
         
         # Frontend
         try:
-            frontend_result = self.generate_frontend_plan(story, pm_suggestions, selected_index)
+            frontend_result = self.generate_frontend_plan(story, pm_suggestions, selected_index, workflow_id, conversation_id)
             plan['Frontend Implementation Plan'] = frontend_result
         except Exception as e:
             logger.error(f"[ArchitectAgent] Failed to generate frontend plan: {e}")
@@ -425,7 +465,7 @@ class ArchitectAgent:
         
         # API/Data Contracts
         try:
-            api_result = self.generate_api_contracts(story, pm_suggestions, selected_index)
+            api_result = self.generate_api_contracts(story, pm_suggestions, selected_index, workflow_id, conversation_id)
             plan['API/Data Contracts'] = api_result
         except Exception as e:
             logger.error(f"[ArchitectAgent] Failed to generate API/data contracts: {e}")
@@ -447,7 +487,7 @@ class ArchitectAgent:
         response = OpenAIService().generate(prompt, max_tokens=256, step="architect.llm_validate_plan")
         return response
 
-    def generate_plan_for_user_acceptance(self, story, pm_suggestions, selected_index):
+    def generate_plan_for_user_acceptance(self, story, pm_suggestions, selected_index, workflow_id=None, conversation_id=None):
         """
         Generate a user-facing implementation plan for user acceptance using BASE_PROMPT_FOR_USER_ACCEPTANCE.
         """
@@ -468,7 +508,14 @@ class ArchitectAgent:
         logger.info(f"[ArchitectAgent] Using deployment: {deployment} for generate_plan_for_user_acceptance")
         
         try:
-            result = self.llm_service.generate(prompt, deployment=deployment, step="user_acceptance", max_tokens=2000)
+            result = self.llm_service.generate(
+                prompt, 
+                deployment=deployment, 
+                step="user_acceptance", 
+                max_tokens=2000,
+                workflow_id=workflow_id,
+                conversation_id=conversation_id
+            )
             write_debug_file('architect_user_llm_output.txt', result)
             self.last_llm_output = result
             

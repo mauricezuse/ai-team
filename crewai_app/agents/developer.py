@@ -54,6 +54,21 @@ class DeveloperAgent(BaseAgent):
         )
         self.logger.info(f"[DeveloperAgent.__init__] Instantiated with llm_service={type(llm_service)} deployment={getattr(llm_service, 'deployment', None)}")
 
+    def _run_llm(self, prompt: str, step: str, workflow_id=None, conversation_id=None, **kwargs):
+        """Run LLM with tracking for developer agent. Ignores unknown kwargs like max_tokens to avoid crashes."""
+        # Only pass through known parameters to avoid unexpected-arg errors
+        safe_args = {
+            'workflow_id': workflow_id,
+            'conversation_id': conversation_id,
+            'step': step
+        }
+        # Optionally map max_tokens if provided; OpenAIService supports it
+        if 'max_tokens' in kwargs and isinstance(kwargs.get('max_tokens'), int):
+            safe_args['max_tokens'] = kwargs['max_tokens']
+        if 'deployment' in kwargs:
+            safe_args['deployment'] = kwargs['deployment']
+        return self.llm_service.generate(prompt, **safe_args)
+
     def implement_story(self, story, plan, rules):
         # If the story is a prompt string, generate both backend and frontend stubs
         if isinstance(story, str):

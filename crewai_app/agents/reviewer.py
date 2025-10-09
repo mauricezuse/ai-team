@@ -24,7 +24,7 @@ class ReviewerTool(BaseTool):
         return self._openai_service.generate(prompt, step="reviewer.review")
 
 class ReviewerAgent:
-    def review_implementation(self, implementation_result, plan, rules):
+    def review_implementation(self, implementation_result, plan, rules, workflow_id=None, conversation_id=None):
         # Support both old and new plan formats
         if isinstance(plan, dict) and 'details' in plan:
             expected_file = plan['details'].get('file')

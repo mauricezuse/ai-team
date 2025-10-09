@@ -24,7 +24,7 @@ class PMTool(BaseTool):
         return self._openai_service.generate(prompt, step="pm.suggest")
 
 class PMAgent:
-    def review_story(self, story):
+    def review_story(self, story, workflow_id=None, conversation_id=None):
         # Use the LLM to analyze the Jira story and generate acceptance criteria, clarifications, and improvements
         description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
         summary = story['fields'].get('summary', '') if isinstance(story, dict) else ''
@@ -35,7 +35,15 @@ class PMAgent:
             f"Summary: {summary}\n"
             f"Output a Python dict with keys: 'acceptance_criteria', 'clarifications', 'improvements'."
         )
-        suggestions_str = pm_tool._run(prompt)
+        
+        # Use OpenAIService directly with LLM tracking context
+        suggestions_str = pm_openai.generate(
+            prompt,
+            workflow_id=workflow_id,
+            conversation_id=conversation_id,
+            step='pm.review_story'
+        )
+        
         try:
             suggestions = eval(suggestions_str, {"__builtins__": {}})
             if isinstance(suggestions, dict):

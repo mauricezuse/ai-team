@@ -47,7 +47,7 @@ test.describe('Code Files Accordion - Fixed', () => {
     await expect(accordionTab).toBeVisible();
     
     // Check for file name in accordion header
-    const fileHeader = accordionTab.locator('.p-accordion-header');
+    const fileHeader = accordionTab.locator('.p-accordionheader');
     await expect(fileHeader).toContainText('implementation-plan.md');
     
     // Click on the accordion tab to expand it

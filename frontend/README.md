@@ -13,7 +13,7 @@ Angular-based frontend application for the AI Team orchestration platform. Provi
 - **SCSS**: Advanced styling with variables and mixins
 
 ### Development Server
-- **Port**: 4001 (configured for AI Team project)
+- **Port**: 4002 (tests expect this; start with `npm run start -- --port 4002`)
 - **Proxy**: Routes API calls to backend on port 8000
 - **Hot Reload**: Development mode with file watching
 - **Source Maps**: Debug-friendly development builds
@@ -49,6 +49,8 @@ frontend/
 - **Workflow Creation**: Create new workflows from Jira stories
 - **Workflow Execution**: Execute AI agent workflows
 - **Workflow Details**: View conversations, code files, and progress
+- **Execution Management**: Start new executions and compare runs
+- **Advanced Analytics**: Detailed metrics and performance analysis
 
 ### Agent Monitoring
 - **Agent Conversations**: Real-time view of agent interactions
@@ -68,6 +70,9 @@ frontend/
 - `WorkflowsListComponent` - Main workflow listing
 - `WorkflowDetailComponent` - Individual workflow view
 - `WorkflowCreateComponent` - Workflow creation form
+  - Shows success toast: `Workflow {JIRA_ID} created successfully`
+  - Submit button uses `[disabled]` and `[loading]` during request
+  - Toast life ~4000ms for test reliability
 - `WorkflowExecuteComponent` - Workflow execution interface
 
 ### Agent Components
@@ -90,6 +95,13 @@ frontend/
 - `createWorkflow(data)` - Create new workflow
 - `executeWorkflow(id)` - Execute workflow
 - `deleteWorkflow(id)` - Delete workflow
+
+### WorkflowAdvancedService
+- `getLlmCalls(conversationId, params)` - Get paginated LLM calls with filtering
+- `compareWorkflows(workflowId, withId)` - Compare two workflows
+- `listExecutions(workflowId)` - List all executions for a workflow
+- `startExecution(workflowId)` - Start a new execution
+- `compareExecutions(workflowId, execA, execB)` - Compare two executions
 
 ### AgentService
 - `getConversations(workflowId)` - Get agent conversations
@@ -130,8 +142,8 @@ npm --version
 # Install dependencies
 npm install
 
-# Start development server
-npm run start -- --port 4001
+# Start development server (tests expect 4002)
+npm run start -- --port 4002
 ```
 
 ### Build
@@ -227,3 +239,31 @@ npm run e2e
 - **Nginx**: Static file serving
 - **Environment Variables**: Runtime configuration
 - **Health Checks**: Container health monitoring
+
+## Advanced Workflows
+
+### Routes
+- `/workflows/:id/advanced` - Workflow timeline and overview
+- `/workflows/:id/advanced/llm-calls?conversationId=<id>` - LLM calls table with filtering
+- `/workflows/:id/advanced/prompt-viewer?conversationId=<id>` - Prompt and output viewer
+- `/workflows/:id/advanced/comparison` - Run comparison interface
+- `/workflows/:id/advanced/errors` - Error diagnostics
+- `/workflows/:id/advanced/artifacts` - Code artifacts viewer
+- `/workflows/:id/advanced/collaboration` - Collaboration graph
+
+### Features
+- **Execution Management**: Start new executions and track metrics
+- **Run Comparison**: Compare different execution runs with detailed metrics
+- **LLM Analytics**: Detailed LLM call analysis with filtering and pagination
+- **Prompt Inspection**: View detailed prompts and responses
+- **Error Diagnostics**: Consolidated error and retry information
+- **Code Artifacts**: View generated code files
+- **Collaboration Graph**: Visualize agent interactions
+
+Uses PrimeNG components and lazy-loaded module `features/workflows-advanced`.
+
+## Feature Flags
+
+Provide flags via:
+- HTML meta tag: `<meta name="ai-team-flags" content="REDACT_SENSITIVE=1">`
+- Or JS global: `window.__AI_FLAGS__ = { REDACT_SENSITIVE: '1' }`

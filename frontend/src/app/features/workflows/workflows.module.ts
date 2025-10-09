@@ -15,7 +15,8 @@ import { CreateWorkflowComponent } from './create-workflow.component';
     RouterModule.forChild([
       { path: '', component: WorkflowsListComponent },
       { path: 'create', component: CreateWorkflowComponent },
-      { path: ':id', component: WorkflowDetailComponent }
+      { path: ':id', component: WorkflowDetailComponent },
+      { path: ':id/advanced', loadChildren: () => import('../workflows-advanced/workflows-advanced.module').then(m => m.WorkflowsAdvancedModule) }
     ])
   ]
 })

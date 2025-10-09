@@ -1,13 +1,17 @@
 <div class="card">
   <div class="card-header">
+    <p-toast [life]="4000"></p-toast>
     <h2>Workflows</h2>
     <div class="workflows-actions">
       <button pButton type="button" label="Refresh" icon="pi pi-refresh" (click)="loadWorkflows()" 
               data-testid="refresh-button" class="p-button-outlined"></button>
       <button pButton type="button" label="Create Workflow" icon="pi pi-plus" (click)="createWorkflow()"
               data-testid="add-workflow-button" class="p-button-outlined"></button>
-      <button pButton type="button" label="Create from Jira" icon="pi pi-external-link" (click)="createFromJira()"
-              data-testid="create-from-jira-button"></button>
+      <div class="jira-create">
+        <input type="text" pInputText placeholder="Jira Story ID (e.g., NEGISHI-123)" [(ngModel)]="jiraId" [disabled]="loading" style="width: 220px; margin-right: .5rem;">
+        <button pButton type="button" label="Create from Jira" icon="pi pi-external-link" (click)="createFromJira()"
+                data-testid="create-from-jira-button" [disabled]="loading" [loading]="loading"></button>
+      </div>
     </div>
   </div>
 
@@ -75,7 +79,7 @@
   </div>
 
   <div>
-    <p-toast></p-toast>
+    <p-toast [life]="4000"></p-toast>
     <div class="workflow-filters">
       <input type="text" pInputText placeholder="Search workflows..." 
              [(ngModel)]="searchTerm" (input)="filterWorkflows()" 

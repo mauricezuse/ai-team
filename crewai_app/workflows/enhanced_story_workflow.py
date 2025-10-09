@@ -36,8 +36,10 @@ class EnhancedStoryWorkflow:
     """
     
     def __init__(self, story_id: str, use_real_jira: bool = True, use_real_github: bool = True, 
-                 codebase_root: Optional[str] = None, user_intervention_mode: bool = False):
+                 codebase_root: Optional[str] = None, user_intervention_mode: bool = False, 
+                 workflow_id: Optional[int] = None):
         self.story_id = story_id
+        self.workflow_id = workflow_id  # Store workflow_id for LLM tracking
         self.jira_service = JiraService(use_real_jira)
         self.github_service = GitHubService(use_real_github)
         self.global_rules = self.load_global_rules()
@@ -45,6 +47,7 @@ class EnhancedStoryWorkflow:
         self.workflow_log = []
         self.collaboration_queue = []  # Track pending collaborations
         self.escalation_queue = []     # Track pending escalations
+        self.current_conversation_id = None  # Track current conversation for LLM calls
         
         # Initialize agents with proper OpenAIService instances
         self.pm = PMAgent()
@@ -261,7 +264,15 @@ class EnhancedStoryWorkflow:
         - Example requests/responses
         """
         
-        result = self.developer._run_llm(prompt, step="api_contract_generation")
+        # Create conversation for developer API contract generation
+        conversation_id = self._create_conversation('api_contract_generation', 'developer')
+        
+        result = self.developer._run_llm(
+            prompt, 
+            step="api_contract_generation",
+            workflow_id=self.workflow_id,
+            conversation_id=conversation_id
+        )
         
         return {
             'type': 'api_contract',
@@ -288,7 +299,15 @@ class EnhancedStoryWorkflow:
         - Accessibility considerations
         """
         
-        result = self.frontend._run_llm(prompt, step="ui_spec_generation")
+        # Create conversation for frontend UI spec generation
+        conversation_id = self._create_conversation('ui_spec_generation', 'frontend')
+        
+        result = self.frontend._run_llm(
+            prompt, 
+            step="ui_spec_generation",
+            workflow_id=self.workflow_id,
+            conversation_id=conversation_id
+        )
         
         return {
             'type': 'ui_spec',
@@ -314,7 +333,15 @@ class EnhancedStoryWorkflow:
         - Database considerations
         """
         
-        result = self.architect._run_llm(prompt, step="data_model_generation")
+        # Create conversation for architect data model generation
+        conversation_id = self._create_conversation('data_model_generation', 'architect')
+        
+        result = self.architect._run_llm(
+            prompt, 
+            step="data_model_generation",
+            workflow_id=self.workflow_id,
+            conversation_id=conversation_id
+        )
         
         return {
             'type': 'data_model',
@@ -376,6 +403,36 @@ class EnhancedStoryWorkflow:
             logger.error(f'[EnhancedWorkflow] Workflow failed: {e}')
             self.save_checkpoint()
             raise
+    
+    def _create_conversation(self, step: str, agent: str, status: str = 'running') -> Optional[int]:
+        """Create conversation in database before agent execution for LLM tracking"""
+        if not self.workflow_id:
+            logger.warning(f"[EnhancedWorkflow] No workflow_id available for conversation creation")
+            return None
+            
+        try:
+            from crewai_app.database import get_db, Conversation
+            from datetime import datetime
+            
+            db = next(get_db())
+            
+            conversation = Conversation(
+                workflow_id=self.workflow_id,
+                step=step,
+                agent=agent,
+                status=status,
+                timestamp=datetime.utcnow()
+            )
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+            
+            logger.info(f"[EnhancedWorkflow] Created conversation {conversation.id} for step {step}")
+            return conversation.id
+            
+        except Exception as e:
+            logger.error(f"[EnhancedWorkflow] Failed to create conversation: {e}")
+            return None
 
     def _retrieve_and_analyze_story(self) -> Optional[Dict[str, Any]]:
         """Retrieve story from Jira and perform initial analysis."""
@@ -386,8 +443,15 @@ class EnhancedStoryWorkflow:
             logger.error(f'[EnhancedWorkflow] Failed to retrieve story {self.story_id}')
             return None
         
-        # PM analysis
-        pm_suggestions = self.pm.review_story(story)
+        # Create conversation for PM analysis
+        self.current_conversation_id = self._create_conversation('story_retrieved_and_analyzed', 'pm')
+        
+        # PM analysis with LLM tracking context
+        pm_suggestions = self.pm.review_story(
+            story, 
+            workflow_id=self.workflow_id,
+            conversation_id=self.current_conversation_id
+        )
         
         self.workflow_log.append({
             'step': 'story_retrieved_and_analyzed',
@@ -442,12 +506,39 @@ class EnhancedStoryWorkflow:
         top_level_files = backend_endpoints + frontend_components
         filtered_index = {f: codebase_index[f] for f in top_level_files}
         
-        selected_files = self.architect.select_relevant_files(story, pm_suggestions, filtered_index)
+        # Create conversation for architect file selection
+        conversation_id = self._create_conversation('file_selection', 'architect')
+        
+        selected_files = self.architect.select_relevant_files(
+            story, 
+            pm_suggestions, 
+            filtered_index,
+            workflow_id=self.workflow_id,
+            conversation_id=conversation_id
+        )
         selected_index = {f: filtered_index[f] for f in selected_files if f in filtered_index}
         
         # Generate plans
-        user_plan = self.architect.generate_plan_for_user_acceptance(story, pm_suggestions, selected_index)
-        dev_plan, updated_rules = self.architect.review_and_plan(story, pm_suggestions, selected_index)
+        # Create conversation for architect user acceptance plan
+        conversation_id = self._create_conversation('user_acceptance_plan', 'architect')
+        
+        user_plan = self.architect.generate_plan_for_user_acceptance(
+            story, 
+            pm_suggestions, 
+            selected_index,
+            workflow_id=self.workflow_id,
+            conversation_id=conversation_id
+        )
+        # Create conversation for architect dev plan
+        conversation_id = self._create_conversation('dev_plan', 'architect')
+        
+        dev_plan, updated_rules = self.architect.review_and_plan(
+            story, 
+            pm_suggestions, 
+            selected_index,
+            workflow_id=self.workflow_id,
+            conversation_id=conversation_id
+        )
         
         self.story_rules = updated_rules
         
@@ -617,10 +708,15 @@ class EnhancedStoryWorkflow:
             if result['status'] == 'completed':
                 try:
                     # Use the correct method name from ReviewerAgent
+                    # Create conversation for reviewer implementation review
+                    conversation_id = self._create_conversation('implementation_review', 'reviewer')
+                    
                     review = self.reviewer.review_implementation(
                         result['result'], 
                         result.get('task', {}), 
-                        self.story_rules
+                        self.story_rules,
+                        workflow_id=self.workflow_id,
+                        conversation_id=conversation_id
                     )
                     review_results.append({
                         'task': result['task'],
@@ -635,11 +731,16 @@ class EnhancedStoryWorkflow:
         for result in results:
             if result['status'] == 'completed':
                 try:
+                    # Create conversation for tester test preparation
+                    conversation_id = self._create_conversation('test_preparation', 'tester')
+                    
                     tests = self.tester.prepare_and_run_tests(
                         result['result'],
                         result.get('task', {}),
                         self.story_rules,
-                        getattr(self, 'latest_codebase_index', {})
+                        getattr(self, 'latest_codebase_index', {}),
+                        workflow_id=self.workflow_id,
+                        conversation_id=conversation_id
                     )
                     # Write tests to disk and commit
                     if isinstance(tests, dict) and isinstance(tests.get('tests'), list):

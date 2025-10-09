@@ -28,6 +28,7 @@ class Workflow(Base):
     # Relationships
     conversations = relationship("Conversation", back_populates="workflow", cascade="all, delete-orphan")
     code_files = relationship("CodeFile", back_populates="workflow", cascade="all, delete-orphan")
+    executions = relationship("Execution", back_populates="workflow", cascade="all, delete-orphan")
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -41,6 +42,11 @@ class Conversation(Base):
     details = Column(Text)
     output = Column(Text)
     prompt = Column(Text)
+    
+    # LLM call tracking
+    llm_calls = Column(JSON, default=list)  # Store array of LLM call objects
+    total_tokens_used = Column(Integer, default=0)
+    total_cost = Column(String, default="0.00")
     
     # Relationships
     workflow = relationship("Workflow", back_populates="conversations")
@@ -90,6 +96,42 @@ class Collaboration(Base):
     
     # Relationships
     conversation = relationship("Conversation", back_populates="collaborations")
+
+class LLMCall(Base):
+    __tablename__ = "llm_calls"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"))
+    model = Column(String)  # e.g., "gpt-4", "gpt-3.5-turbo"
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    cost = Column(String, default="0.00")
+    response_time_ms = Column(Integer, default=0)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    request_data = Column(JSON)  # Store the full request for debugging
+    response_data = Column(JSON)  # Store the full response for debugging
+    
+    # Relationships
+    conversation = relationship("Conversation")
+
+class Execution(Base):
+    __tablename__ = "executions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id"), index=True)
+    status = Column(String, default="pending")  # pending|running|completed|failed
+    started_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime)
+    total_calls = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    total_cost = Column(String, default="0.00")
+    avg_latency_ms = Column(Integer, default=0)
+    models = Column(JSON, default=list)  # list of models used
+    meta = Column(JSON, default=dict)  # prompt/config hashes, flags, etc.
+    
+    # Relationships
+    workflow = relationship("Workflow", back_populates="executions")
 
 # Database functions
 def get_db():

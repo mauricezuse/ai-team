@@ -17,6 +17,15 @@
       "^/api": ""
     }
   },
+  "/api/conversations": {
+    "target": "http://localhost:8000",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api": ""
+    }
+  },
   "/health": {
     "target": "http://localhost:8000",
     "secure": true,

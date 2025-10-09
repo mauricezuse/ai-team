@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { WorkflowService } from '../../core/services/workflow.service';
+import { WorkflowAdvancedService } from '../../core/services/workflow-advanced.service';
 import { CommonModule } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -14,7 +15,7 @@ import { AccordionModule } from 'primeng/accordion';
 @Component({
   selector: 'app-workflow-detail',
   standalone: true,
-  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule],
+  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule, RouterModule],
   providers: [MessageService],
   templateUrl: './workflow-detail.component.html',
   styleUrl: './workflow-detail.component.scss'
@@ -30,6 +31,7 @@ export class WorkflowDetailComponent implements OnInit {
   constructor(
     private route: ActivatedRoute, 
     private workflowService: WorkflowService,
+    private advancedService: WorkflowAdvancedService,
     private messageService: MessageService
   ) {}
 
@@ -44,6 +46,10 @@ export class WorkflowDetailComponent implements OnInit {
     this.workflowService.getWorkflow(id).subscribe({
       next: (workflow) => {
         this.workflow = workflow;
+        // Attach executions list
+        this.advancedService.listExecutions(String(workflow.id)).subscribe(execs => {
+          this.workflow.executions = execs || [];
+        });
         this.initializeConversations();
       },
       error: (error) => {
@@ -59,8 +65,25 @@ export class WorkflowDetailComponent implements OnInit {
 
   initializeConversations() {
     if (this.workflow?.conversations) {
-      // Add expanded property to each conversation - expand by default
+      // Infer missing agent labels from common step names and expand by default
+      const stepToAgent: Record<string, string> = {
+        'story_retrieved_and_analyzed': 'Product Manager',
+        'story_analysis': 'Product Manager',
+        'architecture_design': 'Solution Architect',
+        'implementation_plan_generated': 'Solution Architect',
+        'tasks_broken_down_with_collaboration': 'Solution Architect',
+        'codebase_indexed': 'Backend Developer',
+        'implementation': 'Backend Developer',
+        'tasks_executed_with_escalation': 'Backend Developer',
+        'frontend_implementation': 'Frontend Developer',
+        'final_review_and_testing_completed': 'QA Tester',
+        'pr_skipped': 'Code Reviewer'
+      };
       this.workflow.conversations.forEach((conversation: any) => {
+        const stepKey = String(conversation.step || '').trim().toLowerCase();
+        if (!conversation.agent) {
+          conversation.agent = stepToAgent[stepKey] || conversation.agent || '';
+        }
         conversation.expanded = true;
       });
       
@@ -121,6 +144,18 @@ export class WorkflowDetailComponent implements OnInit {
           detail: 'Error executing workflow'
         });
       }
+    });
+  }
+
+  startNewExecution() {
+    if (!this.workflow) return;
+    this.messageService.add({ severity: 'info', summary: 'Starting', detail: 'Starting new execution...' });
+    this.advancedService.startExecution(String(this.workflow.id)).subscribe({
+      next: (ex) => {
+        this.messageService.add({ severity: 'success', summary: 'Execution started', detail: `Execution #${ex.id}` });
+        this.refreshWorkflow();
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to start execution' })
     });
   }
 
@@ -194,5 +229,11 @@ describe('${filename.split('.')[0]}', () => {
     };
     
     return sampleCode[extension] || `// ${filename}\n// Generated code content would appear here\n// This is a preview of the ${extension} file`;
+  }
+
+  getLLMCallHeader(call: any): string {
+    // Create a header for the LLM call accordion tab
+    const timestamp = new Date(call.timestamp).toLocaleTimeString();
+    return `${call.model} - ${call.total_tokens} tokens - $${call.cost} - ${timestamp}`;
   }
 }

@@ -1,4 +1,4 @@
-<div *ngIf="workflow" class="card">
+<div *ngIf="workflow" class="card" data-testid="workflow-detail">
   <div class="card-header">
     <h2 data-testid="workflow-title">{{ workflow.name }}</h2>
     <div class="workflow-actions">
@@ -15,6 +15,13 @@
       <span [class]="'status-' + workflow.status" data-testid="workflow-status">{{ workflow.status }}</span>
     </p>
     <p><strong>Created:</strong> {{ workflow.created_at | date:'medium' }}</p>
+    <p>
+      <a [routerLink]="['/workflows', workflow.id, 'advanced']" class="p-button p-button-outlined" data-testid="advanced-view-link">
+        Advanced View
+      </a>
+      &nbsp;
+      <button pButton type="button" label="Start New Execution" icon="pi pi-play" class="p-button-info" (click)="startNewExecution()" data-testid="start-execution"></button>
+    </p>
   </div>
 
   <div *ngIf="workflow.agents && workflow.agents.length > 0" class="workflow-agents">
@@ -22,6 +29,36 @@
     <div class="agent-chips">
       <span *ngFor="let agent of workflow.agents" class="p-chip">{{ agent }}</span>
     </div>
+  </div>
+
+  <div class="executions" *ngIf="workflow?.executions?.length >= 0">
+    <h3>Executions</h3>
+    <table class="p-datatable-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Status</th>
+          <th>Started</th>
+          <th>Finished</th>
+          <th>Calls</th>
+          <th>Tokens</th>
+          <th>Cost</th>
+          <th>Avg Latency</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let ex of workflow.executions">
+          <td>{{ ex.id }}</td>
+          <td>{{ ex.status }}</td>
+          <td>{{ ex.started_at | date:'short' }}</td>
+          <td>{{ ex.finished_at | date:'short' }}</td>
+          <td>{{ ex.total_calls }}</td>
+          <td>{{ ex.total_tokens }}</td>
+          <td>{{ ex.total_cost }}</td>
+          <td>{{ ex.avg_latency_ms }}</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <div *ngIf="workflow.conversations && workflow.conversations.length > 0" class="conversations-section" data-testid="conversations">
@@ -118,6 +155,62 @@
               <span class="collaboration-type">{{ collaboration.request_type }}</span>
               <span class="collaboration-status">{{ collaboration.status }}</span>
             </div>
+          </div>
+          
+          <div *ngIf="conversation.llm_calls && conversation.llm_calls.length > 0" class="llm-calls">
+            <strong>LLM Agent Calls:</strong>
+            <div class="llm-summary">
+              <span class="token-usage">Total Tokens: {{ conversation.total_tokens_used }}</span>
+              <span class="cost-usage">Total Cost: ${{ conversation.total_cost }}</span>
+            </div>
+            <p-accordion>
+              <p-accordionTab *ngFor="let call of conversation.llm_calls; let i = index" 
+                              [header]="getLLMCallHeader(call)" 
+                              [selected]="false">
+                <div class="llm-call-content">
+                  <div class="llm-call-header">
+                    <div class="call-info">
+                      <span class="model-name">{{ call.model }}</span>
+                      <span class="call-timestamp">{{ call.timestamp | date:'short' }}</span>
+                    </div>
+                    <div class="call-metrics">
+                      <span class="tokens">{{ call.total_tokens }} tokens</span>
+                      <span class="cost">${{ call.cost }}</span>
+                      <span class="response-time">{{ call.response_time_ms }}ms</span>
+                    </div>
+                  </div>
+                  
+                  <div class="llm-call-details">
+                    <div class="request-section">
+                      <h4>Request:</h4>
+                      <div class="messages">
+                        <div *ngFor="let message of call.request_data.messages" class="message">
+                          <span class="message-role">{{ message.role }}:</span>
+                          <div class="message-content">{{ message.content }}</div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="response-section">
+                      <h4>Response:</h4>
+                      <div class="response-content">{{ call.response_data.content }}</div>
+                    </div>
+                    
+                    <div class="usage-breakdown">
+                      <h4>Token Usage:</h4>
+                      <div class="usage-stats">
+                        <span>Prompt: {{ call.prompt_tokens }} tokens</span>
+                        <span>Completion: {{ call.completion_tokens }} tokens</span>
+                        <span>Total: {{ call.total_tokens }} tokens</span>
+                      </div>
+                    </div>
+            <div style="margin-top: .5rem;">
+              <a [routerLink]="['/workflows', workflow.id, 'advanced', 'llm-calls']" [queryParams]="{ conversationId: conversation.id }" data-testid="open-llm-calls-from-detail">Open in LLM Calls</a>
+            </div>
+                  </div>
+                </div>
+              </p-accordionTab>
+            </p-accordion>
           </div>
         </div>
       </div>
