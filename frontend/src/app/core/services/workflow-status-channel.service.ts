@@ -109,7 +109,12 @@ export class WorkflowStatusChannelService {
       ws.onmessage = (event) => {
         try {
           const statusInfo: WorkflowStatusInfo = JSON.parse(event.data);
-          this.updateStatus(workflowId, statusInfo);
+          // Add connection type to status info
+          const enhancedStatusInfo = {
+            ...statusInfo,
+            connectionType: 'websocket'
+          };
+          this.updateStatus(workflowId, enhancedStatusInfo);
           
           // If terminal, stop connection
           if (statusInfo.isTerminal) {
@@ -152,7 +157,12 @@ export class WorkflowStatusChannelService {
       eventSource.onmessage = (event) => {
         try {
           const statusInfo: WorkflowStatusInfo = JSON.parse(event.data);
-          this.updateStatus(workflowId, statusInfo);
+          // Add connection type to status info
+          const enhancedStatusInfo = {
+            ...statusInfo,
+            connectionType: 'sse'
+          };
+          this.updateStatus(workflowId, enhancedStatusInfo);
           
           // If terminal, stop connection
           if (statusInfo.isTerminal) {
@@ -186,7 +196,12 @@ export class WorkflowStatusChannelService {
       takeUntil(stopSubject),
       switchMap(() => this.getWorkflowStatus(workflowId)),
       tap(statusInfo => {
-        this.updateStatus(workflowId, statusInfo);
+        // Add connection type to status info
+        const enhancedStatusInfo = {
+          ...statusInfo,
+          connectionType: 'polling'
+        };
+        this.updateStatus(workflowId, enhancedStatusInfo);
         
         // If terminal, stop polling
         if (statusInfo.isTerminal) {

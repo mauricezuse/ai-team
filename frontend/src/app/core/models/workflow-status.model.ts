@@ -8,6 +8,7 @@ export interface WorkflowStatusInfo {
   last_heartbeat_at?: string;
   heartbeat_stale: boolean;
   message: string;
+  connectionType?: string;
 }
 
 export interface WorkflowResponse {
@@ -23,6 +24,10 @@ export interface WorkflowResponse {
   target_branch: string;
   conversations: any[];
   code_files: any[];
+  
+  // Additional fields that may exist
+  agents?: string[];
+  executions?: any[];
   
   // Enhanced status fields
   isTerminal: boolean;
