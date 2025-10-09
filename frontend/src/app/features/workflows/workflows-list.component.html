@@ -53,6 +53,9 @@
             <span *ngIf="getStatusInfo(workflow.id)?.connectionType" class="p-chip p-chip-info p-chip-sm">
               {{ getStatusInfo(workflow.id)?.connectionType }}
             </span>
+            <span *ngIf="workflow.error" class="p-chip p-chip-danger p-chip-sm" title="{{ workflow.error }}">
+              Error
+            </span>
           </td>
           <td>{{ workflow.created_at | date:'short' }}</td>
           <td>{{ workflow.agents?.length || 0 }}</td>
