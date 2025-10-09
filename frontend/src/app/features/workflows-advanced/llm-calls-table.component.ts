@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { WorkflowAdvancedService } from '../../core/services/workflow-advanced.service';
+import { WorkflowService } from '../../core/services/workflow.service';
 import { FeatureFlagService } from '../../core/services/feature-flag.service';
 import { FormsModule } from '@angular/forms';
 import { ButtonModule } from 'primeng/button';
@@ -28,13 +29,28 @@ export class LLmCallsTableComponent implements OnInit {
 
   redactionEnabled = false;
 
-  constructor(private route: ActivatedRoute, private advancedService: WorkflowAdvancedService, private flags: FeatureFlagService) {}
+  constructor(private route: ActivatedRoute, private advancedService: WorkflowAdvancedService, private flags: FeatureFlagService, private workflowService: WorkflowService) {}
 
   ngOnInit(): void {
     this.workflowId = this.route.parent?.snapshot.paramMap.get('id') || '';
     this.conversationId = this.route.snapshot.queryParamMap.get('conversationId');
     this.redactionEnabled = this.flags.isEnabled('REDACT_SENSITIVE', false);
-    this.reload();
+    if (!this.conversationId) {
+      // Auto-select first conversation if none provided
+      if (this.workflowId) {
+        this.workflowService.getWorkflow(this.workflowId).subscribe(wf => {
+          const convs = wf?.conversations || [];
+          if (convs.length > 0) {
+            this.conversationId = String(convs[0].id);
+          }
+          this.reload();
+        }, () => this.reload());
+      } else {
+        this.reload();
+      }
+    } else {
+      this.reload();
+    }
   }
 
   reload() {
