@@ -184,7 +184,7 @@ test.describe('Comprehensive Database and Workflow Features', () => {
 
   test('should complete full workflow lifecycle with database integration', async ({ page }) => {
     // 1. Navigate to workflows list
-    await page.goto('http://localhost:4001/workflows');
+    await page.goto('//workflows');
     await page.waitForLoadState('networkidle');
     
     // 2. Verify workflows list displays database data
@@ -217,7 +217,7 @@ test.describe('Comprehensive Database and Workflow Features', () => {
     await expect(page.getByTestId('workflow-title')).toHaveText('NEGISHI-181: Test Manual Creation');
     
     // 6. Test workflow execution
-    await page.goto('http://localhost:4001/workflows/1');
+    await page.goto('//workflows/1');
     await page.waitForLoadState('networkidle');
     
     await page.getByTestId('execute-button').click();
@@ -246,7 +246,7 @@ test.describe('Comprehensive Database and Workflow Features', () => {
 
   test('should handle database-driven search and filtering', async ({ page }) => {
     // Navigate to workflows list
-    await page.goto('http://localhost:4001/workflows');
+    await page.goto('//workflows');
     await page.waitForLoadState('networkidle');
     
     // Test search by name
@@ -309,7 +309,7 @@ test.describe('Comprehensive Database and Workflow Features', () => {
 
   test('should handle database-driven workflow status management', async ({ page }) => {
     // Navigate to workflow detail
-    await page.goto('http://localhost:4001/workflows/1');
+    await page.goto('//workflows/1');
     await page.waitForLoadState('networkidle');
     
     // Check initial status
@@ -358,7 +358,7 @@ test.describe('Comprehensive Database and Workflow Features', () => {
     });
     
     // Navigate to workflows page
-    await page.goto('http://localhost:4001/workflows');
+    await page.goto('//workflows');
     await page.waitForLoadState('networkidle');
     
     // Should show error state
@@ -408,7 +408,7 @@ test.describe('Comprehensive Database and Workflow Features', () => {
     });
     
     // Navigate to workflows list
-    await page.goto('http://localhost:4001/workflows');
+    await page.goto('//workflows');
     await page.waitForLoadState('networkidle');
     
     // Click delete button
@@ -450,7 +450,7 @@ test.describe('Comprehensive Database and Workflow Features', () => {
     });
     
     // Navigate to workflow detail
-    await page.goto('http://localhost:4001/workflows/1');
+    await page.goto('//workflows/1');
     await page.waitForLoadState('networkidle');
     
     // Test workflow update (if edit functionality exists)
