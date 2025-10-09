@@ -1,5 +1,5 @@
 <div class="card">
-  <p-toast></p-toast>
+  <p-toast [life]="4000"></p-toast>
   <div class="card-header">
     <h2>Create New Workflow</h2>
     <p>Create a new workflow based on a Jira story. The AI agents will analyze and implement the requirements.</p>
@@ -97,6 +97,7 @@
         type="submit" 
         label="Create Workflow" 
         icon="pi pi-plus"
+        (click)="onPreSubmit()"
         [disabled]="loading"
         [loading]="loading"
         class="p-button-success"

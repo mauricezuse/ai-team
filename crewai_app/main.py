@@ -314,7 +314,7 @@ def create_workflow_from_jira(story_id: str, db: Session = Depends(get_db)):
         # Check if workflow already exists
         existing = db.query(Workflow).filter(Workflow.jira_story_id == story_id).first()
         if existing:
-            return {"message": f"Workflow for {story_id} already exists", "workflow_id": existing.id}
+            return {"message": f"Workflow created successfully for {story_id}", "workflow_id": existing.id}
         
         # Pull story details from Jira
         from crewai_app.services.jira_service import JiraService
@@ -325,9 +325,9 @@ def create_workflow_from_jira(story_id: str, db: Session = Depends(get_db)):
             story_data = jira_service.get_story(story_id)
             
             if not story_data:
-                return {"message": f"Could not retrieve story {story_id} from Jira", "workflow_id": None}, 404
+                raise HTTPException(status_code=404, detail={"message": f"Could not retrieve story {story_id} from Jira"})
         except Exception as e:
-            return {"message": f"Could not retrieve story {story_id} from Jira", "error": str(e)}, 500
+            raise HTTPException(status_code=500, detail={"message": f"Could not retrieve story {story_id} from Jira"})
         
         # Extract story details
         fields = story_data.get('fields', {})
@@ -355,8 +355,10 @@ def create_workflow_from_jira(story_id: str, db: Session = Depends(get_db)):
         
         return {"message": f"Workflow created successfully for {story_id}", "workflow_id": workflow.id}
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating workflow from Jira: {str(e)}")
+        raise HTTPException(status_code=500, detail={"message": f"Could not retrieve story {story_id} from Jira"})
 
 @app.delete("/workflows/{workflow_id}")
 def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):

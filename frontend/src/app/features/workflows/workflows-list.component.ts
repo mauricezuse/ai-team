@@ -148,7 +148,11 @@ export class WorkflowsListComponent implements OnInit {
   }
 
   createFromJira() {
-    const storyId = (this.jiraId || '').trim();
+    let storyId = (this.jiraId || '').trim();
+    if (!storyId) {
+      const prompted = (window as any).prompt ? (window as any).prompt('Enter Jira Story ID') : null;
+      storyId = (prompted || '').trim();
+    }
     if (storyId) {
       this.loading = true;
       this.workflowService.createWorkflowFromJira(storyId).subscribe({
@@ -164,10 +168,13 @@ export class WorkflowsListComponent implements OnInit {
         },
         error: (error) => {
           this.loading = false;
+          const rawDetail = error?.error?.detail;
+          const backendMsg = error?.error?.message || (typeof rawDetail === 'string' ? rawDetail : rawDetail?.message);
+          const detail = backendMsg || `Could not retrieve story ${storyId} from Jira`;
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: error.error?.detail || 'Failed to create workflow from Jira'
+            detail
           });
         }
       });

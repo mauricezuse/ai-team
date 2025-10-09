@@ -50,8 +50,13 @@ crewai_app/
 - `GET /workflows` - List all workflows
 - `GET /workflows/{id}` - Get specific workflow with conversations and code files
 - `POST /workflows` - Create new workflow
+-   - Idempotent: returns 200 and existing workflow if `jira_story_id` already exists
 - `DELETE /workflows/{id}` - Delete workflow
 - `POST /workflows/{id}/execute` - Execute workflow with AI agents
+- `POST /workflows/from-jira/{story_id}` - Create workflow from Jira story
+    - On success: `{ "message": "Workflow created successfully for {story_id}", "workflow_id": <id> }`
+    - On duplicate: same success message with existing `workflow_id`
+    - On error: `{ "message": "Could not retrieve story {story_id} from Jira" }` with 404/500
 
 ### Workflow Execution
 - **Enhanced Conversations**: Each conversation includes detailed prompts and agent instructions

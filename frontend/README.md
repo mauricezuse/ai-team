@@ -13,7 +13,7 @@ Angular-based frontend application for the AI Team orchestration platform. Provi
 - **SCSS**: Advanced styling with variables and mixins
 
 ### Development Server
-- **Port**: 4001 (configured for AI Team project)
+- **Port**: 4002 (tests expect this; start with `npm run start -- --port 4002`)
 - **Proxy**: Routes API calls to backend on port 8000
 - **Hot Reload**: Development mode with file watching
 - **Source Maps**: Debug-friendly development builds
@@ -68,6 +68,9 @@ frontend/
 - `WorkflowsListComponent` - Main workflow listing
 - `WorkflowDetailComponent` - Individual workflow view
 - `WorkflowCreateComponent` - Workflow creation form
+  - Shows success toast: `Workflow {JIRA_ID} created successfully`
+  - Submit button uses `[disabled]` and `[loading]` during request
+  - Toast life ~4000ms for test reliability
 - `WorkflowExecuteComponent` - Workflow execution interface
 
 ### Agent Components
@@ -130,8 +133,8 @@ npm --version
 # Install dependencies
 npm install
 
-# Start development server
-npm run start -- --port 4001
+# Start development server (tests expect 4002)
+npm run start -- --port 4002
 ```
 
 ### Build

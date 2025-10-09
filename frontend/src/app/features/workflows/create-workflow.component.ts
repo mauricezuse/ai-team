@@ -50,6 +50,11 @@ export class CreateWorkflowComponent implements OnInit {
     // Form is already initialized in constructor
   }
 
+  onPreSubmit() {
+    // Immediately set loading to ensure button disables before async request
+    if (!this.loading) this.loading = true;
+  }
+
   onSubmit() {
     if (this.workflowForm.valid) {
       this.submittedInvalid = false;
@@ -78,6 +83,8 @@ export class CreateWorkflowComponent implements OnInit {
         }
       });
     } else {
+      // Reset loading if set via onPreSubmit when form invalid
+      this.loading = false;
       // Surface validation errors to the user
       Object.values(this.workflowForm.controls).forEach(control => control.markAsTouched());
       this.messageService.add({
