@@ -49,6 +49,8 @@ frontend/
 - **Workflow Creation**: Create new workflows from Jira stories
 - **Workflow Execution**: Execute AI agent workflows
 - **Workflow Details**: View conversations, code files, and progress
+- **Execution Management**: Start new executions and compare runs
+- **Advanced Analytics**: Detailed metrics and performance analysis
 
 ### Agent Monitoring
 - **Agent Conversations**: Real-time view of agent interactions
@@ -93,6 +95,13 @@ frontend/
 - `createWorkflow(data)` - Create new workflow
 - `executeWorkflow(id)` - Execute workflow
 - `deleteWorkflow(id)` - Delete workflow
+
+### WorkflowAdvancedService
+- `getLlmCalls(conversationId, params)` - Get paginated LLM calls with filtering
+- `compareWorkflows(workflowId, withId)` - Compare two workflows
+- `listExecutions(workflowId)` - List all executions for a workflow
+- `startExecution(workflowId)` - Start a new execution
+- `compareExecutions(workflowId, execA, execB)` - Compare two executions
 
 ### AgentService
 - `getConversations(workflowId)` - Get agent conversations
@@ -231,10 +240,25 @@ npm run e2e
 - **Environment Variables**: Runtime configuration
 - **Health Checks**: Container health monitoring
 
-## Advanced Workflows (New)
+## Advanced Workflows
 
-- Route: `/workflows/:id/advanced` – timeline view (skeleton)
-- Route: `/workflows/:id/advanced/llm-calls?conversationId=<id>` – LLM calls table (skeleton)
+### Routes
+- `/workflows/:id/advanced` - Workflow timeline and overview
+- `/workflows/:id/advanced/llm-calls?conversationId=<id>` - LLM calls table with filtering
+- `/workflows/:id/advanced/prompt-viewer?conversationId=<id>` - Prompt and output viewer
+- `/workflows/:id/advanced/comparison` - Run comparison interface
+- `/workflows/:id/advanced/errors` - Error diagnostics
+- `/workflows/:id/advanced/artifacts` - Code artifacts viewer
+- `/workflows/:id/advanced/collaboration` - Collaboration graph
+
+### Features
+- **Execution Management**: Start new executions and track metrics
+- **Run Comparison**: Compare different execution runs with detailed metrics
+- **LLM Analytics**: Detailed LLM call analysis with filtering and pagination
+- **Prompt Inspection**: View detailed prompts and responses
+- **Error Diagnostics**: Consolidated error and retry information
+- **Code Artifacts**: View generated code files
+- **Collaboration Graph**: Visualize agent interactions
 
 Uses PrimeNG components and lazy-loaded module `features/workflows-advanced`.
 

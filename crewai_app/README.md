@@ -50,7 +50,7 @@ crewai_app/
 - `GET /workflows` - List all workflows
 - `GET /workflows/{id}` - Get specific workflow with conversations and code files
 - `POST /workflows` - Create new workflow
--   - Idempotent: returns 200 and existing workflow if `jira_story_id` already exists
+  - Idempotent: returns 200 and existing workflow if `jira_story_id` already exists
 - `DELETE /workflows/{id}` - Delete workflow
 - `POST /workflows/{id}/execute` - Execute workflow with AI agents
 - `POST /workflows/from-jira/{story_id}` - Create workflow from Jira story
@@ -58,6 +58,12 @@ crewai_app/
     - On duplicate: same success message with existing `workflow_id`
     - On error: `{ "message": "Could not retrieve story {story_id} from Jira" }` with 404/500
 - `GET /workflows/{id}/compare?with=<id2>` - Compare two workflow runs and return aggregate metrics
+
+### Execution Management
+- `GET /workflows/{id}/executions` - List all executions for a workflow
+- `GET /workflows/{id}/executions/{execution_id}` - Get specific execution details
+- `POST /workflows/{id}/executions/start` - Start a new execution for a workflow
+- `GET /workflows/{id}/executions/{exec_a}/compare/{exec_b}` - Compare two executions
 
 ### Workflow Execution
 - **Enhanced Conversations**: Each conversation includes detailed prompts and agent instructions
@@ -101,6 +107,19 @@ crewai_app/
 - `filename` - File name
 - `content` - File content
 - `file_type` - File type (python, typescript, etc.)
+
+### Execution
+- `id` - Primary key
+- `workflow_id` - Foreign key to workflow
+- `status` - Execution status (pending, running, completed, failed)
+- `started_at` - Execution start timestamp
+- `finished_at` - Execution completion timestamp
+- `total_calls` - Total number of LLM calls
+- `total_tokens` - Total tokens consumed
+- `total_cost` - Total cost in dollars
+- `avg_latency_ms` - Average response latency in milliseconds
+- `models` - List of models used in execution
+- `meta` - Additional metadata (prompt hashes, config flags, etc.)
 
 ## Environment Variables
 
