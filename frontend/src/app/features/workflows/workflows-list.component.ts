@@ -1,5 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { WorkflowService } from '../../core/services/workflow.service';
+import { WorkflowStatusChannelService } from '../../core/services/workflow-status-channel.service';
 import { Router, RouterModule } from '@angular/router';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
@@ -10,6 +11,8 @@ import { FormsModule } from '@angular/forms';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
+import { WorkflowResponse, WorkflowStatusInfo } from '../../core/models/workflow-status.model';
 
 @Component({
   selector: 'app-workflows-list',
@@ -19,19 +22,24 @@ import { CommonModule } from '@angular/common';
   templateUrl: './workflows-list.component.html',
   styleUrl: './workflows-list.component.scss'
 })
-export class WorkflowsListComponent implements OnInit {
-  workflows: any[] = [];
-  filteredWorkflows: any[] = [];
-  selectedWorkflow: any;
+export class WorkflowsListComponent implements OnInit, OnDestroy {
+  workflows: WorkflowResponse[] = [];
+  filteredWorkflows: WorkflowResponse[] = [];
+  selectedWorkflow: WorkflowResponse | null = null;
   displayAddDialog = false;
   newWorkflow = { name: '' };
   searchTerm: string = '';
   selectedStatus: string = '';
   loading: boolean = false;
   jiraId: string = '';
+  
+  // Status tracking
+  statusSubscriptions: Map<number, Subscription> = new Map();
+  statusInfo: Map<number, WorkflowStatusInfo> = new Map();
 
   constructor(
-    private workflowService: WorkflowService, 
+    private workflowService: WorkflowService,
+    private statusChannelService: WorkflowStatusChannelService,
     private router: Router,
     private messageService: MessageService
   ) {}
@@ -40,11 +48,23 @@ export class WorkflowsListComponent implements OnInit {
     this.loadWorkflows();
   }
 
+  ngOnDestroy() {
+    // Clean up all status subscriptions
+    this.statusSubscriptions.forEach((subscription, workflowId) => {
+      subscription.unsubscribe();
+      this.statusChannelService.stopConnection(workflowId);
+    });
+    this.statusSubscriptions.clear();
+  }
+
   loadWorkflows() {
     this.workflowService.getWorkflows().subscribe({
       next: (workflows) => {
         this.workflows = workflows;
         this.filteredWorkflows = [...workflows];
+        
+        // Start status tracking for running workflows
+        this.startStatusTracking();
       },
       error: (error) => {
         console.error('Error loading workflows:', error);
@@ -58,6 +78,56 @@ export class WorkflowsListComponent implements OnInit {
         this.filteredWorkflows = [];
       }
     });
+  }
+
+  startStatusTracking() {
+    // Track status for running workflows
+    this.workflows.forEach(workflow => {
+      if (workflow.status === 'running' && !this.statusSubscriptions.has(workflow.id)) {
+        const subscription = this.statusChannelService.getStatusStream(workflow.id).subscribe({
+          next: (statusInfo) => {
+            this.statusInfo.set(workflow.id, statusInfo);
+            
+            // Update workflow status
+            const workflowIndex = this.workflows.findIndex(w => w.id === workflow.id);
+            if (workflowIndex !== -1) {
+              this.workflows[workflowIndex].status = statusInfo.status;
+              this.workflows[workflowIndex].isTerminal = statusInfo.isTerminal;
+              this.workflows[workflowIndex].heartbeat_stale = statusInfo.heartbeat_stale;
+              
+              // Update filtered workflows
+              const filteredIndex = this.filteredWorkflows.findIndex(w => w.id === workflow.id);
+              if (filteredIndex !== -1) {
+                this.filteredWorkflows[filteredIndex] = { ...this.workflows[workflowIndex] };
+              }
+            }
+            
+            // Stop tracking if terminal
+            if (statusInfo.isTerminal) {
+              this.stopStatusTracking(workflow.id);
+            }
+          },
+          error: (error) => {
+            console.error(`Status tracking error for workflow ${workflow.id}:`, error);
+          }
+        });
+        
+        this.statusSubscriptions.set(workflow.id, subscription);
+      }
+    });
+  }
+
+  stopStatusTracking(workflowId: number) {
+    const subscription = this.statusSubscriptions.get(workflowId);
+    if (subscription) {
+      subscription.unsubscribe();
+      this.statusSubscriptions.delete(workflowId);
+      this.statusChannelService.stopConnection(workflowId);
+    }
+  }
+
+  getStatusInfo(workflowId: number): WorkflowStatusInfo | undefined {
+    return this.statusInfo.get(workflowId);
   }
 
   filterWorkflows() {

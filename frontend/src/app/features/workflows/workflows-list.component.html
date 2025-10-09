@@ -48,6 +48,11 @@
                   [class]="'status-' + workflow.status.toLowerCase()">
               {{ workflow.status }}
             </span>
+            <span *ngIf="workflow.isTerminal" class="p-chip p-chip-success p-chip-sm">Terminal</span>
+            <span *ngIf="workflow.heartbeat_stale && workflow.status === 'running'" class="p-chip p-chip-warning p-chip-sm">Stale</span>
+            <span *ngIf="getStatusInfo(workflow.id)?.connectionType" class="p-chip p-chip-info p-chip-sm">
+              {{ getStatusInfo(workflow.id)?.connectionType }}
+            </span>
           </td>
           <td>{{ workflow.created_at | date:'short' }}</td>
           <td>{{ workflow.agents?.length || 0 }}</td>
