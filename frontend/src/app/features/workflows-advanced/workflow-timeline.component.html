@@ -1,5 +1,8 @@
 <div class="p-3" data-testid="advanced-workflow-timeline">
   <h2>Workflow {{ workflowId }} - Advanced View</h2>
+  <div style="margin-bottom: 1rem;">
+    <a [routerLink]="['/workflows', workflowId, 'advanced', 'comparison']" class="p-button p-button-outlined" data-testid="run-comparison-link">Run Comparison</a>
+  </div>
   <div class="filters">
     <input type="text" pInputText placeholder="Filter by agent or step" [(ngModel)]="filterText">
   </div>
