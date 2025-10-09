@@ -486,6 +486,12 @@
         border-left: 3px solid #28a745;
         color: #495057;
         line-height: 1.5;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        max-height: 500px;
+        overflow-y: auto;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 0.875rem;
       }
       
       .usage-stats {
