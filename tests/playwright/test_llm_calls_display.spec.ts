@@ -50,7 +50,7 @@ test.describe('LLM Calls Display', () => {
     
     // Check accordion tab header
     const firstTab = accordionTabs.first();
-    const tabHeader = firstTab.locator('.p-accordion-header');
+    const tabHeader = firstTab.locator('.p-accordionheader');
     await expect(tabHeader).toContainText('gpt-4');
     await expect(tabHeader).toContainText('350 tokens');
     await expect(tabHeader).toContainText('$0.0105');

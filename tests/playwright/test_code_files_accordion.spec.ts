@@ -42,7 +42,7 @@ test.describe('Code Files Accordion', () => {
     await expect(accordionTab).toBeVisible();
     
     // Check for file name in accordion header
-    const fileHeader = accordionTab.locator('.p-accordion-header');
+    const fileHeader = accordionTab.locator('.p-accordionheader');
     await expect(fileHeader).toContainText('implementation-plan.md');
     
     // Click on the accordion tab to expand it
@@ -103,8 +103,8 @@ test.describe('Code Files Accordion', () => {
     const firstTab = accordionTabs.nth(0);
     const secondTab = accordionTabs.nth(1);
     
-    await expect(firstTab.locator('.p-accordion-header')).toContainText('job_offer.py');
-    await expect(secondTab.locator('.p-accordion-header')).toContainText('job_offer.py');
+    await expect(firstTab.locator('.p-accordionheader')).toContainText('job_offer.py');
+    await expect(secondTab.locator('.p-accordionheader')).toContainText('job_offer.py');
   });
 
   test('should have working repository links', async ({ page }) => {
