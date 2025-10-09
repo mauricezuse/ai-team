@@ -34,7 +34,7 @@ async def startup_event():
 # Add CORS middleware for frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200", "http://localhost:3000"],  # Angular dev server
+    allow_origins=["http://localhost:4200", "http://localhost:3000", "http://minions.localhost:4200"],  # Angular dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
