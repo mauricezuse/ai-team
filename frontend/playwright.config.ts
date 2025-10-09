@@ -6,7 +6,7 @@ export default defineConfig({
   expect: { timeout: 5000 },
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:4200',
+    baseURL: 'http://minions.localhost:4200',
     browserName: 'chromium',
     headless: true,
     viewport: { width: 1280, height: 720 }
