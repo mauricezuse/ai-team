@@ -230,3 +230,16 @@ npm run e2e
 - **Nginx**: Static file serving
 - **Environment Variables**: Runtime configuration
 - **Health Checks**: Container health monitoring
+
+## Advanced Workflows (New)
+
+- Route: `/workflows/:id/advanced` – timeline view (skeleton)
+- Route: `/workflows/:id/advanced/llm-calls?conversationId=<id>` – LLM calls table (skeleton)
+
+Uses PrimeNG components and lazy-loaded module `features/workflows-advanced`.
+
+## Feature Flags
+
+Provide flags via:
+- HTML meta tag: `<meta name="ai-team-flags" content="REDACT_SENSITIVE=1">`
+- Or JS global: `window.__AI_FLAGS__ = { REDACT_SENSITIVE: '1' }`

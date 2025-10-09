@@ -1,0 +1,34 @@
+<div class="p-3" data-testid="llm-calls-table">
+  <h3>LLM Calls - Workflow {{ workflowId }}</h3>
+  <div class="controls">
+    <input type="text" pInputText placeholder="Search (q)" [(ngModel)]="search" (input)="reload()" />
+    <input type="text" pInputText placeholder="Model" [(ngModel)]="model" (input)="reload()" />
+    <button pButton type="button" label="Export JSON" (click)="exportJson()"></button>
+  </div>
+  <p *ngIf="!conversationId" class="text-warning">No conversation selected. Open from timeline or pass ?conversationId=ID.</p>
+  <p *ngIf="!redactionEnabled" class="text-warning">Sensitive fields visible (flag off).</p>
+  <p-table [value]="calls" [paginator]="true" [rows]="pageSize" [totalRecords]="total" [lazy]="true" (onPage)="onPage($event)">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>ID</th>
+        <th>Model</th>
+        <th>Tokens</th>
+        <th>Cost</th>
+        <th>Latency (ms)</th>
+        <th>Timestamp</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-call>
+      <tr>
+        <td>{{ call.id }}</td>
+        <td>{{ call.model }}</td>
+        <td>{{ call.total_tokens }}</td>
+        <td>{{ call.cost }}</td>
+        <td>{{ call.response_time_ms }}</td>
+        <td>{{ call.timestamp }}</td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+

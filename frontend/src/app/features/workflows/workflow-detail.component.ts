@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { WorkflowService } from '../../core/services/workflow.service';
 import { CommonModule } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
@@ -14,7 +14,7 @@ import { AccordionModule } from 'primeng/accordion';
 @Component({
   selector: 'app-workflow-detail',
   standalone: true,
-  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule],
+  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule, RouterModule],
   providers: [MessageService],
   templateUrl: './workflow-detail.component.html',
   styleUrl: './workflow-detail.component.scss'
@@ -59,8 +59,25 @@ export class WorkflowDetailComponent implements OnInit {
 
   initializeConversations() {
     if (this.workflow?.conversations) {
-      // Add expanded property to each conversation - expand by default
+      // Infer missing agent labels from common step names and expand by default
+      const stepToAgent: Record<string, string> = {
+        'story_retrieved_and_analyzed': 'Product Manager',
+        'story_analysis': 'Product Manager',
+        'architecture_design': 'Solution Architect',
+        'implementation_plan_generated': 'Solution Architect',
+        'tasks_broken_down_with_collaboration': 'Solution Architect',
+        'codebase_indexed': 'Backend Developer',
+        'implementation': 'Backend Developer',
+        'tasks_executed_with_escalation': 'Backend Developer',
+        'frontend_implementation': 'Frontend Developer',
+        'final_review_and_testing_completed': 'QA Tester',
+        'pr_skipped': 'Code Reviewer'
+      };
       this.workflow.conversations.forEach((conversation: any) => {
+        const stepKey = String(conversation.step || '').trim().toLowerCase();
+        if (!conversation.agent) {
+          conversation.agent = stepToAgent[stepKey] || conversation.agent || '';
+        }
         conversation.expanded = true;
       });
       

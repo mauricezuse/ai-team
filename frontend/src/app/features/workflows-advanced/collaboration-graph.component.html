@@ -1,0 +1,16 @@
+<div data-testid="collaboration-graph">
+  <h3>Collaboration Graph</h3>
+  <div *ngIf="loading">Loading...</div>
+  <div *ngIf="!loading">
+    <h4>Nodes</h4>
+    <ul>
+      <li *ngFor="let n of nodes">{{ n }}</li>
+    </ul>
+    <h4>Edges (from → to : count)</h4>
+    <ul>
+      <li *ngFor="let e of edges">{{ e.from }} → {{ e.to }} : {{ e.count }}</li>
+    </ul>
+  </div>
+</div>
+
+

@@ -1,0 +1,12 @@
+<div data-testid="run-comparison">
+  <h3>Run Comparison</h3>
+  <div>
+    <label>Compare with ID:&nbsp;</label>
+    <input type="text" [(ngModel)]="otherId" placeholder="e.g., 11" />
+    <button (click)="compare()">Compare</button>
+  </div>
+  <div *ngIf="loading">Loading...</div>
+  <pre *ngIf="!loading && data">{{ data | json }}</pre>
+</div>
+
+

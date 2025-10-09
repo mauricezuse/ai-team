@@ -15,6 +15,11 @@
       <span [class]="'status-' + workflow.status" data-testid="workflow-status">{{ workflow.status }}</span>
     </p>
     <p><strong>Created:</strong> {{ workflow.created_at | date:'medium' }}</p>
+    <p>
+      <a [routerLink]="['/workflows', workflow.id, 'advanced']" class="p-button p-button-outlined" data-testid="advanced-view-link">
+        Advanced View
+      </a>
+    </p>
   </div>
 
   <div *ngIf="workflow.agents && workflow.agents.length > 0" class="workflow-agents">
@@ -167,6 +172,9 @@
                         <span>Total: {{ call.total_tokens }} tokens</span>
                       </div>
                     </div>
+            <div style="margin-top: .5rem;">
+              <a [routerLink]="['/workflows', workflow.id, 'advanced', 'llm-calls']" [queryParams]="{ conversationId: conversation.id }" data-testid="open-llm-calls-from-detail">Open in LLM Calls</a>
+            </div>
                   </div>
                 </div>
               </p-accordionTab>

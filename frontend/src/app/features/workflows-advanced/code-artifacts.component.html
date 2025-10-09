@@ -1,0 +1,13 @@
+<div data-testid="code-artifacts">
+  <h3>Code Artifacts</h3>
+  <div *ngIf="loading">Loading...</div>
+  <div *ngIf="!loading && files.length === 0">No files found.</div>
+  <ul *ngIf="!loading && files.length > 0">
+    <li *ngFor="let f of files">
+      <span>#{{ f.conversationId }} - {{ f.filename }}</span>
+      <a *ngIf="f.file_path" [href]="'https://github.com/mauricezuse/negishi-freelancing/blob/main/' + f.file_path" target="_blank">Open</a>
+    </li>
+  </ul>
+</div>
+
+

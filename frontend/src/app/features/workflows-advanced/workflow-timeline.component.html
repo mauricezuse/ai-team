@@ -1,0 +1,20 @@
+<div class="p-3" data-testid="advanced-workflow-timeline">
+  <h2>Workflow {{ workflowId }} - Advanced View</h2>
+  <div class="filters">
+    <input type="text" pInputText placeholder="Filter by agent or step" [(ngModel)]="filterText">
+  </div>
+  <p-timeline [value]="filteredSteps">
+    <ng-template pTemplate="content" let-step>
+      <p-card [header]="step.step" subheader="{{ step.agent }}">
+        <p>{{ step.status }}</p>
+        <a [routerLink]="['/workflows', workflowId, 'advanced', 'llm-calls']" [queryParams]="{ conversationId: step.id }" data-testid="open-llm-calls">Open LLM Calls</a>
+        <span>&nbsp;|&nbsp;</span>
+        <a [routerLink]="['/workflows', workflowId, 'advanced', 'prompt-viewer']" [queryParams]="{ conversationId: step.id }" data-testid="open-prompt-viewer">Open Prompt Viewer</a>
+      </p-card>
+    </ng-template>
+  </p-timeline>
+  <a routerLink="llm-calls" data-testid="llm-calls-link">Open LLM Calls</a>
+  
+</div>
+
+
