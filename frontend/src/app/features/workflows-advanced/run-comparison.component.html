@@ -1,9 +1,18 @@
 <div data-testid="run-comparison">
   <h3>Run Comparison</h3>
-  <div>
-    <label>Compare with ID:&nbsp;</label>
-    <input type="text" [(ngModel)]="otherId" placeholder="e.g., 11" />
-    <button (click)="compare()">Compare</button>
+  <div *ngIf="executions.length === 0">No executions yet. Start one from the workflow detail page.</div>
+  <div *ngIf="executions.length > 0">
+    <label>Execution A:&nbsp;</label>
+    <select [(ngModel)]="execA">
+      <option *ngFor="let ex of executions" [value]="ex.id">#{{ ex.id }} ({{ ex.status }})</option>
+    </select>
+    &nbsp;&nbsp;
+    <label>Execution B:&nbsp;</label>
+    <select [(ngModel)]="execB">
+      <option *ngFor="let ex of executions" [value]="ex.id">#{{ ex.id }} ({{ ex.status }})</option>
+    </select>
+    &nbsp;&nbsp;
+    <button (click)="compare()" [disabled]="!execA || !execB">Compare</button>
   </div>
   <div *ngIf="loading">Loading...</div>
   <pre *ngIf="!loading && data">{{ data | json }}</pre>

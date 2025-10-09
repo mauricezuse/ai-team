@@ -13,7 +13,9 @@ import { WorkflowAdvancedService } from '../../core/services/workflow-advanced.s
 })
 export class RunComparisonComponent implements OnInit {
   workflowId!: string;
-  otherId = '';
+  executions: any[] = [];
+  execA: number | null = null;
+  execB: number | null = null;
   data: any = null;
   loading = false;
 
@@ -21,12 +23,21 @@ export class RunComparisonComponent implements OnInit {
 
   ngOnInit(): void {
     this.workflowId = this.route.parent?.snapshot.paramMap.get('id') || '';
+    if (this.workflowId) {
+      this.adv.listExecutions(this.workflowId).subscribe(list => {
+        this.executions = list || [];
+        if (this.executions.length >= 2) {
+          this.execA = this.executions[1]?.id;
+          this.execB = this.executions[0]?.id;
+        }
+      });
+    }
   }
 
   compare() {
-    if (!this.otherId) return;
+    if (!this.execA || !this.execB) return;
     this.loading = true;
-    this.adv.compareWorkflows(this.workflowId, this.otherId).subscribe(res => {
+    this.adv.compareExecutions(this.workflowId, this.execA, this.execB).subscribe(res => {
       this.data = res;
       this.loading = false;
     }, () => this.loading = false);
