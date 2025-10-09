@@ -57,12 +57,18 @@ crewai_app/
     - On success: `{ "message": "Workflow created successfully for {story_id}", "workflow_id": <id> }`
     - On duplicate: same success message with existing `workflow_id`
     - On error: `{ "message": "Could not retrieve story {story_id} from Jira" }` with 404/500
+- `GET /workflows/{id}/compare?with=<id2>` - Compare two workflow runs and return aggregate metrics
 
 ### Workflow Execution
 - **Enhanced Conversations**: Each conversation includes detailed prompts and agent instructions
 - **Code Files**: Generated code files are linked to specific conversations
 - **Agent Collaboration**: Multi-agent workflow with Product Manager, Architect, Developer, Tester, and Reviewer
 - **Real-time Updates**: Workflow status updates as agents complete their tasks
+
+### LLM Calls
+- `GET /conversations/{conversation_id}/llm-calls` - Get tracked LLM calls for a conversation
+  - Query params: `page`, `page_size`, `sort_by` (timestamp|model|total_tokens|response_time_ms|cost|id), `sort_dir` (asc|desc), `model`, `q`, `date_from`, `date_to`
+  - Returns: `{ conversation_id, total_tokens_used, total_cost, page, page_size, total, calls: [...] }`
 
 ### Health & Status
 - `GET /health` - Health check endpoint
@@ -115,6 +121,9 @@ NEGISHI_GITHUB_REPO=org/repo
 AZURE_OPENAI_API_KEY=your_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT=your-deployment
+
+# Feature Flags
+AI_TEAM_REDACT_SENSITIVE=1
 ```
 
 ## Development

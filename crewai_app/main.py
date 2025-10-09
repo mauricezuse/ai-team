@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Body, HTTPException, Depends
+from fastapi import FastAPI, Body, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
+from sqlalchemy import String
 import argparse
 import sys
 import os
@@ -16,8 +17,10 @@ from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.config import settings
 from crewai_app.database import get_db, init_database, Workflow, Conversation, CodeFile, Escalation, Collaboration
 from crewai_app.database import LLMCall
+from crewai_app.utils.feature_flags import FeatureFlags
 
 app = FastAPI(title="CrewAI Orchestration Platform")
+flags = FeatureFlags()
 
 # Initialize database on startup
 @app.on_event("startup")
@@ -82,21 +85,89 @@ def health_check():
     return {"status": "ok"}
 
 @app.get("/conversations/{conversation_id}/llm-calls")
-def get_conversation_llm_calls(conversation_id: int, db: Session = Depends(get_db)):
-    """Return LLM calls for a conversation with usage and cost."""
+def get_conversation_llm_calls(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    sort_by: str = Query("timestamp"),
+    sort_dir: str = Query("desc"),
+    model: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+):
+    """Return LLM calls for a conversation with usage and cost, with pagination and filters."""
     conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Prefer normalized rows if any exist
-    llm_rows = db.query(LLMCall).filter(LLMCall.conversation_id == conversation_id).all()
-    if llm_rows:
+    query = db.query(LLMCall).filter(LLMCall.conversation_id == conversation_id)
+
+    # Apply filters
+    if model:
+        query = query.filter(LLMCall.model == model)
+    if q:
+        # basic search in request/response payloads (JSON serialized cast)
+        # Note: SQLite JSON search is limited; fallback to LIKE on stringified JSON
+        query = query.filter(
+            (LLMCall.request_data.cast(String).like(f"%{q}%")) | (LLMCall.response_data.cast(String).like(f"%{q}%"))
+        )
+    # Date range filters
+    from datetime import datetime as _dt
+    def _parse_dt(value: Optional[str]) -> Optional[datetime]:
+        if not value:
+            return None
+        try:
+            return _dt.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    df = _parse_dt(date_from)
+    dt = _parse_dt(date_to)
+    if df:
+        query = query.filter(LLMCall.timestamp >= df)
+    if dt:
+        query = query.filter(LLMCall.timestamp <= dt)
+
+    # Sorting
+    sortable = {
+        "timestamp": LLMCall.timestamp,
+        "model": LLMCall.model,
+        "total_tokens": LLMCall.total_tokens,
+        "response_time_ms": LLMCall.response_time_ms,
+        "cost": LLMCall.cost,
+        "id": LLMCall.id,
+    }
+    order_col = sortable.get(sort_by, LLMCall.timestamp)
+    if (sort_dir or "").lower() == "asc":
+        query = query.order_by(order_col.asc())
+    else:
+        query = query.order_by(order_col.desc())
+
+    # Pagination
+    total = query.count()
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    if items:
+        def _maybe_redact(call: Dict[str, Any]) -> Dict[str, Any]:
+            if flags.is_enabled('REDACT_SENSITIVE', False):
+                # Remove/obfuscate potentially sensitive payloads
+                redacted = dict(call)
+                if 'request_data' in redacted:
+                    redacted['request_data'] = {'redacted': True}
+                if 'response_data' in redacted:
+                    redacted['response_data'] = {'redacted': True}
+                return redacted
+            return call
         return {
             "conversation_id": conversation_id,
             "total_tokens_used": conversation.total_tokens_used or 0,
             "total_cost": conversation.total_cost or "0.00",
+            "page": page,
+            "page_size": page_size,
+            "total": total,
             "calls": [
-                {
+                _maybe_redact({
                     "id": row.id,
                     "model": row.model,
                     "prompt_tokens": row.prompt_tokens,
@@ -107,8 +178,8 @@ def get_conversation_llm_calls(conversation_id: int, db: Session = Depends(get_d
                     "timestamp": row.timestamp,
                     "request_data": row.request_data,
                     "response_data": row.response_data,
-                }
-                for row in llm_rows
+                })
+                for row in items
             ],
         }
 
@@ -123,42 +194,111 @@ def get_conversation_llm_calls(conversation_id: int, db: Session = Depends(get_d
         except (json.JSONDecodeError, TypeError):
             llm_calls_data = []
 
+    def _maybe_redact_json_list(calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not flags.is_enabled('REDACT_SENSITIVE', False):
+            return calls
+        out: List[Dict[str, Any]] = []
+        for c in calls:
+            red = dict(c)
+            if 'request_data' in red:
+                red['request_data'] = {'redacted': True}
+            if 'response_data' in red:
+                red['response_data'] = {'redacted': True}
+            out.append(red)
+        return out
+
     return {
         "conversation_id": conversation_id,
         "total_tokens_used": conversation.total_tokens_used or 0,
         "total_cost": conversation.total_cost or "0.00",
-        "calls": llm_calls_data,
+        "page": 1,
+        "page_size": len(llm_calls_data),
+        "total": len(llm_calls_data),
+        "calls": _maybe_redact_json_list(llm_calls_data),
+    }
+
+@app.get("/workflows/{workflow_id}/compare")
+def compare_workflows(workflow_id: int, with_id: int = Query(..., alias="with"), db: Session = Depends(get_db)):
+    """Compare two workflow runs and return aggregate metrics and deltas."""
+    def aggregate(wid: int) -> Dict[str, Any]:
+        # Validate workflow exists
+        wf = db.query(Workflow).filter(Workflow.id == wid).first()
+        if not wf:
+            raise HTTPException(status_code=404, detail=f"Workflow {wid} not found")
+        # Join conversations -> llm_calls
+        from sqlalchemy import func
+        conv_ids = [c.id for c in db.query(Conversation.id).filter(Conversation.workflow_id == wid).all()]
+        if not conv_ids:
+            return {
+                "workflow_id": wid,
+                "total_calls": 0,
+                "total_tokens": 0,
+                "total_cost": "0.0000",
+                "avg_latency_ms": 0,
+                "models": {},
+            }
+        totals = db.query(
+            func.count(LLMCall.id),
+            func.coalesce(func.sum(LLMCall.total_tokens), 0),
+            func.coalesce(func.sum(func.cast(LLMCall.cost, String)), "0.0000"),
+            func.coalesce(func.avg(LLMCall.response_time_ms), 0),
+        ).filter(LLMCall.conversation_id.in_(conv_ids)).one()
+
+        # Model breakdown
+        rows = db.query(LLMCall.model, func.count(LLMCall.id)).\
+            filter(LLMCall.conversation_id.in_(conv_ids)).group_by(LLMCall.model).all()
+        model_map: Dict[str, int] = {m or "unknown": c for m, c in rows}
+        # Compute numeric cost sum from string
+        try:
+            cost_sum = float(totals[2]) if isinstance(totals[2], str) else float(totals[2] or 0)
+        except Exception:
+            cost_sum = 0.0
+        return {
+            "workflow_id": wid,
+            "total_calls": int(totals[0] or 0),
+            "total_tokens": int(totals[1] or 0),
+            "total_cost": f"{cost_sum:.4f}",
+            "avg_latency_ms": int(totals[3] or 0),
+            "models": model_map,
+        }
+
+    left = aggregate(workflow_id)
+    right = aggregate(with_id)
+
+    def delta(a, b):
+        return {k: (b.get(k) - a.get(k) if isinstance(a.get(k), (int, float)) and isinstance(b.get(k), (int, float)) else None) for k in ["total_calls", "total_tokens", "avg_latency_ms"]}
+
+    return {
+        "left": left,
+        "right": right,
+        "deltas": delta(left, right),
     }
 
 # New workflow management endpoints
-@app.get("/workflows", response_model=List[WorkflowResponse])
+@app.get("/workflows")
 def get_workflows(db: Session = Depends(get_db)):
-    """Get all workflows"""
+    """List workflows from the database (numeric IDs)."""
     workflows = db.query(Workflow).all()
-    
-    # Convert SQLAlchemy models to dictionaries
-    workflow_list = []
-    for workflow in workflows:
-        workflow_data = {
-            "id": workflow.id,
-            "name": workflow.name,
-            "jira_story_id": workflow.jira_story_id,
-            "jira_story_title": workflow.jira_story_title,
-            "jira_story_description": workflow.jira_story_description or "",
-            "status": workflow.status,
-            "created_at": workflow.created_at,
-            "updated_at": workflow.updated_at,
-            "repository_url": workflow.repository_url,
-            "target_branch": workflow.target_branch,
+    return [
+        {
+            "id": w.id,
+            "name": w.name,
+            "jira_story_id": w.jira_story_id,
+            "jira_story_title": w.jira_story_title,
+            "jira_story_description": w.jira_story_description or "",
+            "status": w.status,
+            "created_at": w.created_at,
+            "updated_at": w.updated_at,
+            "repository_url": w.repository_url,
+            "target_branch": w.target_branch,
             "conversations": [],
             "code_files": []
         }
-        workflow_list.append(workflow_data)
-    
-    return workflow_list
+        for w in workflows
+    ]
 
-@app.get("/workflows/{workflow_id}", response_model=WorkflowResponse)
-def get_workflow(workflow_id: int, db: Session = Depends(get_db)):
+@app.get("/workflows/{workflow_id:int}", response_model=WorkflowResponse)
+def get_workflow_db(workflow_id: int, db: Session = Depends(get_db)):
     """Get a specific workflow with all its data"""
     workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not workflow:
@@ -248,6 +388,46 @@ def get_workflow(workflow_id: int, db: Session = Depends(get_db)):
     
     return workflow_data
 
+@app.get("/workflows/{workflow_id}")
+def get_workflow_file(workflow_id: str):
+    """Legacy file-based workflow detail used in tests."""
+    try:
+        results_dir = "workflow_results"
+        if not os.path.exists(results_dir):
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        path = os.path.join(results_dir, f"{workflow_id}_checkpoint.json")
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        with open(path, "r") as f:
+            data = json.load(f)
+        # Build minimal response structure expected by tests
+        workflow_data = {
+            "id": workflow_id,
+            "name": (workflow_id.replace("_", " ").title() if workflow_id else "Workflow"),
+            "status": "completed",
+            "conversations": [],
+        }
+        log = data.get("workflow_log", [])
+        for entry in log:
+            workflow_data["conversations"].append({
+                "step": entry.get("step", ""),
+                "agent": entry.get("agent", ""),
+                "timestamp": entry.get("timestamp", ""),
+                "status": entry.get("status", ""),
+                "details": entry.get("details", ""),
+                "output": entry.get("output", ""),
+                "code_files": entry.get("code_files", []),
+                "escalations": entry.get("escalations", []),
+                "collaborations": entry.get("collaborations", []),
+            })
+        return workflow_data
+    except IOError:
+        raise HTTPException(status_code=500, detail="Error reading workflow file")
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail=f"Error reading workflow: {e}")
+
 @app.post("/workflows", response_model=WorkflowResponse)
 def create_workflow(workflow_data: WorkflowCreate, db: Session = Depends(get_db)):
     """Create a new workflow from a Jira story"""
@@ -274,7 +454,7 @@ def create_workflow(workflow_data: WorkflowCreate, db: Session = Depends(get_db)
     
     return workflow
 
-@app.post("/workflows/{workflow_id}/execute")
+@app.post("/workflows/{workflow_id:int}/execute")
 def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
     """Execute a workflow in the background (non-blocking)"""
     workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
@@ -294,6 +474,25 @@ def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
     result = workflow_executor.execute_workflow_async(workflow_id)
     
     return result
+
+@app.post("/workflows/{workflow_id}/execute")
+def execute_workflow_file(workflow_id: str, story_id: Optional[str] = Query(None)):
+    """Legacy execute endpoint for string workflow ids used in tests."""
+    try:
+        sid = story_id or (workflow_id.split("_")[-1] if workflow_id else None)
+        wf = EnhancedStoryWorkflow(story_id=sid, use_real_jira=True, use_real_github=True, codebase_root=None, user_intervention_mode=False)
+        results = wf.run()
+        return {
+            "message": "Workflow executed successfully",
+            "workflow_id": workflow_id,
+            "story_id": sid,
+            "status": "completed",
+            "results": results,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error executing workflow")
 
 @app.get("/workflows/{workflow_id}/status")
 def get_workflow_status(workflow_id: int):
@@ -424,17 +623,7 @@ def _extract_text_from_adf(adf_doc):
     
     return ' '.join(text_parts).strip()
 
-@app.get("/agents")
-def get_agents():
-    """Get available agents"""
-    return [
-        {"id": "pm", "name": "Product Manager", "role": "Requirements analysis and user story creation"},
-        {"id": "architect", "name": "System Architect", "role": "System design and architecture"},
-        {"id": "developer", "name": "Backend Developer", "role": "Backend implementation and APIs"},
-        {"id": "frontend", "name": "Frontend Developer", "role": "Frontend implementation and UI"},
-        {"id": "tester", "name": "QA Tester", "role": "Testing and quality assurance"},
-        {"id": "reviewer", "name": "Code Reviewer", "role": "Code review and quality standards"}
-    ]
+## Removed earlier duplicate /agents endpoint to ensure consistency
 
 @app.get("/")
 def list_endpoints():
