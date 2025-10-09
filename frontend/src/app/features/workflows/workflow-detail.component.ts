@@ -70,7 +70,7 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
         // Attach executions list
         this.advancedService.listExecutions(String(workflow.id)).subscribe(execs => {
           if (this.workflow) {
-            this.workflow.executions = execs || [];
+            (this.workflow as any).executions = execs || [];
           }
         });
         this.initializeConversations();
@@ -207,7 +207,7 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
       detail: 'Workflow execution started...'
     });
 
-    this.workflowService.executeWorkflow(this.workflow.id).subscribe({
+    this.workflowService.executeWorkflow(String(this.workflow.id)).subscribe({
       next: (result) => {
         this.messageService.add({
           severity: 'success',
@@ -217,7 +217,9 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
         this.refreshWorkflow();
       },
       error: (error) => {
-        this.workflow.status = 'error';
+        if (this.workflow) {
+          this.workflow.status = 'error';
+        }
         this.messageService.add({
           severity: 'error',
           summary: 'Error',

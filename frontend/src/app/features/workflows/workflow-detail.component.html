@@ -42,7 +42,7 @@
     </div>
   </div>
 
-  <div class="executions" *ngIf="workflow?.executions?.length >= 0">
+  <div class="executions" *ngIf="workflow?.executions && workflow.executions && workflow.executions.length > 0">
     <h3>Executions</h3>
     <table class="p-datatable-table">
       <thead>
