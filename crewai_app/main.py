@@ -304,7 +304,15 @@ def get_workflows(db: Session = Depends(get_db)):
             "repository_url": w.repository_url,
             "target_branch": w.target_branch,
             "conversations": [],
-            "code_files": []
+            "code_files": [],
+            # Enhanced status fields
+            "isTerminal": w.status in ["completed", "failed", "cancelled"],
+            "started_at": w.started_at,
+            "finished_at": w.finished_at,
+            "error": w.error,
+            "last_heartbeat_at": w.last_heartbeat_at,
+            "heartbeat_stale": w.last_heartbeat_at and w.status == "running" and 
+                              (datetime.utcnow() - w.last_heartbeat_at).total_seconds() > 300
         }
         for w in workflows
     ]
