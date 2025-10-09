@@ -1,22 +1,24 @@
 <div class="card">
+  <p-toast></p-toast>
   <div class="card-header">
     <h2>Create New Workflow</h2>
     <p>Create a new workflow based on a Jira story. The AI agents will analyze and implement the requirements.</p>
   </div>
 
   <form [formGroup]="workflowForm" (ngSubmit)="onSubmit()" class="workflow-form">
+    <div *ngIf="submittedInvalid" class="error-message">Please fill in all required fields correctly</div>
     <div class="form-group">
       <label for="jira_story_id">Jira Story ID *</label>
       <input 
         pInputText 
         id="jira_story_id"
         formControlName="jira_story_id"
-        placeholder="e.g., NEGISHI-123"
+        placeholder="Jira Story ID (e.g., NEGISHI-123)"
         class="form-control"
         [class.ng-invalid]="workflowForm.get('jira_story_id')?.invalid && workflowForm.get('jira_story_id')?.touched"
       />
       <small class="form-hint">Format: PROJECT-123 (e.g., NEGISHI-123)</small>
-      <div *ngIf="workflowForm.get('jira_story_id')?.invalid && workflowForm.get('jira_story_id')?.touched" class="error-message">
+      <div *ngIf="workflowForm.get('jira_story_id')?.invalid && workflowForm.get('jira_story_id')?.touched" class="field-error">
         <div *ngIf="workflowForm.get('jira_story_id')?.errors?.['required']">Jira Story ID is required</div>
         <div *ngIf="workflowForm.get('jira_story_id')?.errors?.['pattern']">Format must be PROJECT-123</div>
       </div>
@@ -32,7 +34,7 @@
         class="form-control"
         [class.ng-invalid]="workflowForm.get('jira_story_title')?.invalid && workflowForm.get('jira_story_title')?.touched"
       />
-      <div *ngIf="workflowForm.get('jira_story_title')?.invalid && workflowForm.get('jira_story_title')?.touched" class="error-message">
+      <div *ngIf="workflowForm.get('jira_story_title')?.invalid && workflowForm.get('jira_story_title')?.touched" class="field-error">
         <div *ngIf="workflowForm.get('jira_story_title')?.errors?.['required']">Story title is required</div>
         <div *ngIf="workflowForm.get('jira_story_title')?.errors?.['minlength']">Title must be at least 10 characters</div>
       </div>
@@ -49,7 +51,7 @@
         class="form-control"
         [class.ng-invalid]="workflowForm.get('jira_story_description')?.invalid && workflowForm.get('jira_story_description')?.touched"
       ></textarea>
-      <div *ngIf="workflowForm.get('jira_story_description')?.invalid && workflowForm.get('jira_story_description')?.touched" class="error-message">
+      <div *ngIf="workflowForm.get('jira_story_description')?.invalid && workflowForm.get('jira_story_description')?.touched" class="field-error">
         <div *ngIf="workflowForm.get('jira_story_description')?.errors?.['required']">Story description is required</div>
         <div *ngIf="workflowForm.get('jira_story_description')?.errors?.['minlength']">Description must be at least 20 characters</div>
       </div>
@@ -95,7 +97,7 @@
         type="submit" 
         label="Create Workflow" 
         icon="pi pi-plus"
-        [disabled]="workflowForm.invalid || loading"
+        [disabled]="loading"
         [loading]="loading"
         class="p-button-success"
       ></button>

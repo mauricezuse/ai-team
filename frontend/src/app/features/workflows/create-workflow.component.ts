@@ -29,6 +29,7 @@ import { WorkflowService } from '../../core/services/workflow.service';
 export class CreateWorkflowComponent implements OnInit {
   workflowForm: FormGroup;
   loading = false;
+  submittedInvalid = false;
 
   constructor(
     private fb: FormBuilder,
@@ -51,6 +52,7 @@ export class CreateWorkflowComponent implements OnInit {
 
   onSubmit() {
     if (this.workflowForm.valid) {
+      this.submittedInvalid = false;
       this.loading = true;
       
       this.workflowService.createWorkflow(this.workflowForm.value).subscribe({
@@ -62,7 +64,9 @@ export class CreateWorkflowComponent implements OnInit {
           });
           
           // Navigate to the new workflow detail page
-          this.router.navigate(['/workflows', workflow.id]);
+          setTimeout(() => {
+            this.router.navigate(['/workflows', workflow.id]);
+          }, 300);
         },
         error: (error) => {
           this.loading = false;
@@ -74,11 +78,14 @@ export class CreateWorkflowComponent implements OnInit {
         }
       });
     } else {
+      // Surface validation errors to the user
+      Object.values(this.workflowForm.controls).forEach(control => control.markAsTouched());
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation Error',
         detail: 'Please fill in all required fields correctly'
       });
+      this.submittedInvalid = true;
     }
   }
 
