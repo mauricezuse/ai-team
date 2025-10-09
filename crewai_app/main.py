@@ -15,6 +15,7 @@ from crewai_app.workflows.story_implementation_workflow import StoryImplementati
 from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.config import settings
 from crewai_app.database import get_db, init_database, Workflow, Conversation, CodeFile, Escalation, Collaboration
+from crewai_app.database import LLMCall
 
 app = FastAPI(title="CrewAI Orchestration Platform")
 
@@ -79,6 +80,55 @@ class ConversationResponse(BaseModel):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.get("/conversations/{conversation_id}/llm-calls")
+def get_conversation_llm_calls(conversation_id: int, db: Session = Depends(get_db)):
+    """Return LLM calls for a conversation with usage and cost."""
+    conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Prefer normalized rows if any exist
+    llm_rows = db.query(LLMCall).filter(LLMCall.conversation_id == conversation_id).all()
+    if llm_rows:
+        return {
+            "conversation_id": conversation_id,
+            "total_tokens_used": conversation.total_tokens_used or 0,
+            "total_cost": conversation.total_cost or "0.00",
+            "calls": [
+                {
+                    "id": row.id,
+                    "model": row.model,
+                    "prompt_tokens": row.prompt_tokens,
+                    "completion_tokens": row.completion_tokens,
+                    "total_tokens": row.total_tokens,
+                    "cost": row.cost,
+                    "response_time_ms": row.response_time_ms,
+                    "timestamp": row.timestamp,
+                    "request_data": row.request_data,
+                    "response_data": row.response_data,
+                }
+                for row in llm_rows
+            ],
+        }
+
+    # Fallback to JSON in conversation.llm_calls
+    llm_calls_data = []
+    if conversation.llm_calls:
+        try:
+            if isinstance(conversation.llm_calls, str):
+                llm_calls_data = json.loads(conversation.llm_calls)
+            else:
+                llm_calls_data = conversation.llm_calls
+        except (json.JSONDecodeError, TypeError):
+            llm_calls_data = []
+
+    return {
+        "conversation_id": conversation_id,
+        "total_tokens_used": conversation.total_tokens_used or 0,
+        "total_cost": conversation.total_cost or "0.00",
+        "calls": llm_calls_data,
+    }
 
 # New workflow management endpoints
 @app.get("/workflows", response_model=List[WorkflowResponse])
@@ -204,7 +254,8 @@ def create_workflow(workflow_data: WorkflowCreate, db: Session = Depends(get_db)
     # Check if workflow already exists
     existing = db.query(Workflow).filter(Workflow.jira_story_id == workflow_data.jira_story_id).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Workflow for this Jira story already exists")
+        # Return the existing workflow to make operation idempotent for UI/tests
+        return existing
     
     # Create new workflow
     workflow = Workflow(
@@ -225,198 +276,36 @@ def create_workflow(workflow_data: WorkflowCreate, db: Session = Depends(get_db)
 
 @app.post("/workflows/{workflow_id}/execute")
 def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
-    """Execute a workflow using the existing EnhancedStoryWorkflow system"""
+    """Execute a workflow in the background (non-blocking)"""
     workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
     
-    # Update workflow status
-    workflow.status = "running"
-    db.commit()
-    
-    try:
-        # Use the existing EnhancedStoryWorkflow system
-        from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
-        
-        # Check if we should use real Jira or mock data
-        use_real_jira = True
-        try:
-            # Test if the story exists in Jira
-            from crewai_app.services.jira_service import JiraService
-            jira_service = JiraService(use_real=True)
-            story_data = jira_service.get_story(workflow.jira_story_id)
-            if not story_data:
-                use_real_jira = False
-        except Exception as e:
-            print(f"Jira story {workflow.jira_story_id} not found or inaccessible: {e}")
-            use_real_jira = False
-        
-        # Create and run the enhanced workflow
-        enhanced_workflow = EnhancedStoryWorkflow(
-            story_id=workflow.jira_story_id,
-            use_real_jira=use_real_jira,
-            use_real_github=True
-        )
-        
-        # Run the workflow and get results
-        results = enhanced_workflow.run()
-        
-        # Store the workflow log in the database
-        if hasattr(enhanced_workflow, 'workflow_log') and enhanced_workflow.workflow_log:
-            for log_entry in enhanced_workflow.workflow_log:
-                # Get or create conversation with enhanced data
-                conversation = Conversation(
-                    workflow_id=workflow_id,
-                    step=log_entry.get('step', 'unknown'),
-                    agent=log_entry.get('agent', 'unknown'),
-                    status=log_entry.get('status', 'completed'),
-                    details=log_entry.get('details', ''),
-                    output=log_entry.get('output', ''),
-                    prompt=log_entry.get('prompt', '')
-                )
-                db.add(conversation)
-                # Ensure conversation.id is available for child rows
-                db.flush()
-                
-                # Store code files if they exist
-                if 'code_files' in log_entry and log_entry['code_files']:
-                    for file_path in log_entry['code_files']:
-                        code_file = CodeFile(
-                            workflow_id=workflow_id,
-                            conversation_id=conversation.id,
-                            filename=file_path.split('/')[-1],
-                            file_path=file_path,
-                            file_type='generated'
-                        )
-                        db.add(code_file)
-                
-                # Add sample code files based on step (always add for demonstration)
-                step_code_files = {
-                    'story_retrieved_and_analyzed': [],
-                    'codebase_indexed': [],
-                    'implementation_plan_generated': ['docs/architecture/implementation-plan.md'],
-                    'tasks_broken_down_with_collaboration': ['docs/tasks/task-breakdown.md'],
-                    'tasks_executed_with_escalation': ['backend/routes/job_offer.py', 'backend/models/job_offer.py'],
-                    'frontend_implementation': ['frontend/src/app/features/job-offers/job-offers-list.component.ts', 'frontend/src/app/features/job-offers/job-offer-detail.component.ts'],
-                    'pr_skipped': [],
-                    'final_review_and_testing_completed': ['tests/test_job_offer.py', 'tests/e2e/job-offer.spec.ts']
-                }
-                
-                code_files = step_code_files.get(conversation.step, [])
-                for file_path in code_files:
-                    code_file = CodeFile(
-                        workflow_id=workflow_id,
-                        conversation_id=conversation.id,
-                        filename=file_path.split('/')[-1],
-                        file_path=file_path,
-                        file_type='generated'
-                    )
-                    db.add(code_file)
-        else:
-            # If no workflow log exists, create some mock conversation data
-            from datetime import datetime
-            mock_conversations = [
-                {
-                    'step': 'story_analysis',
-                    'agent': 'pm',
-                    'status': 'completed',
-                    'details': f'Analyzed {workflow.jira_story_id} story requirements',
-                    'output': f'Story analysis complete. Identified key requirements for {workflow.jira_story_title}.',
-                    'prompt': f'As a Product Manager, analyze the {workflow.jira_story_id} story: "{workflow.jira_story_title}". Break down the requirements, identify stakeholders, and create user stories for this feature.',
-                    'code_files': []
-                },
-                {
-                    'step': 'architecture_design',
-                    'agent': 'architect',
-                    'status': 'completed',
-                    'details': f'Designed architecture for {workflow.jira_story_id}',
-                    'output': f'Architecture design complete. Proposed system design for {workflow.jira_story_title}.',
-                    'prompt': f'As a System Architect, design a system for {workflow.jira_story_title}. Consider scalability, security, and integration requirements.',
-                    'code_files': ['docs/architecture/design.md']
-                },
-                {
-                    'step': 'implementation',
-                    'agent': 'developer',
-                    'status': 'completed',
-                    'details': f'Implemented backend for {workflow.jira_story_id}',
-                    'output': f'Backend implementation complete for {workflow.jira_story_title}.',
-                    'prompt': f'As a Backend Developer, implement the backend functionality for {workflow.jira_story_title}. Focus on API design, data models, and business logic.',
-                    'code_files': ['backend/routes/job_offer.py', 'backend/models/job_offer.py']
-                },
-                {
-                    'step': 'frontend_implementation',
-                    'agent': 'frontend',
-                    'status': 'completed',
-                    'details': f'Implemented frontend for {workflow.jira_story_id}',
-                    'output': f'Frontend implementation complete for {workflow.jira_story_title}.',
-                    'prompt': f'As a Frontend Developer, implement the user interface for {workflow.jira_story_title}. Focus on user experience, responsive design, and integration with backend APIs.',
-                    'code_files': ['frontend/src/app/features/job-offers/job-offers-list.component.ts', 'frontend/src/app/features/job-offers/job-offer-detail.component.ts']
-                }
-            ]
-            
-            for mock_conv in mock_conversations:
-                conversation = Conversation(
-                    workflow_id=workflow_id,
-                    step=mock_conv['step'],
-                    agent=mock_conv['agent'],
-                    status=mock_conv['status'],
-                    details=mock_conv['details'],
-                    output=mock_conv['output'],
-                    prompt=mock_conv['prompt']
-                )
-                db.add(conversation)
-                # Ensure conversation.id is available for child rows
-                db.flush()
-                
-                # Store code files if they exist
-                if mock_conv['code_files']:
-                    for file_path in mock_conv['code_files']:
-                        code_file = CodeFile(
-                            workflow_id=workflow_id,
-                            conversation_id=conversation.id,
-                            filename=file_path.split('/')[-1],
-                            file_path=file_path,
-                            file_type='generated'
-                        )
-                        db.add(code_file)
-                
-                # Add sample escalations and collaborations for testing
-                if mock_conv['step'] == 'architecture_design':
-                    # Add escalation from architect to developer
-                    escalation = Escalation(
-                        conversation_id=conversation.id,
-                        from_agent='architect',
-                        to_agent='developer',
-                        reason='Complex security requirements need backend expertise',
-                        status='resolved'
-                    )
-                    db.add(escalation)
-                
-                if mock_conv['step'] == 'implementation':
-                    # Add collaboration from developer to frontend
-                    collaboration = Collaboration(
-                        conversation_id=conversation.id,
-                        from_agent='developer',
-                        to_agent='frontend',
-                        request_type='API_contract',
-                        status='completed'
-                    )
-                    db.add(collaboration)
-        
-        workflow.status = "completed"
-        db.commit()
-        
+    # Check if workflow is already running
+    if workflow.status == "running":
         return {
-            "message": "Workflow executed successfully", 
+            "message": "Workflow is already running",
             "workflow_id": workflow_id,
-            "story_id": workflow.jira_story_id,
-            "results_count": len(results) if results else 0
+            "status": "running"
         }
-        
-    except Exception as e:
-        workflow.status = "error"
-        db.commit()
-        raise HTTPException(status_code=500, detail=f"Error executing workflow: {str(e)}")
+    
+    # Start background execution
+    from crewai_app.services.workflow_executor import workflow_executor
+    result = workflow_executor.execute_workflow_async(workflow_id)
+    
+    return result
+
+@app.get("/workflows/{workflow_id}/status")
+def get_workflow_status(workflow_id: int):
+    """Get the current status of a workflow execution"""
+    from crewai_app.services.workflow_executor import workflow_executor
+    return workflow_executor.get_workflow_status(workflow_id)
+
+@app.get("/workflows/status/running")
+def get_running_workflows():
+    """Get all currently running workflows"""
+    from crewai_app.services.workflow_executor import workflow_executor
+    return workflow_executor.get_running_workflows()
 
 @app.post("/workflows/from-jira/{story_id}")
 def create_workflow_from_jira(story_id: str, db: Session = Depends(get_db)):
@@ -436,15 +325,9 @@ def create_workflow_from_jira(story_id: str, db: Session = Depends(get_db)):
             story_data = jira_service.get_story(story_id)
             
             if not story_data:
-                raise HTTPException(status_code=404, detail=f"Could not retrieve story {story_id} from Jira. Please check if the story exists and you have access to it.")
+                return {"message": f"Could not retrieve story {story_id} from Jira", "workflow_id": None}, 404
         except Exception as e:
-            if "Production mode requires real Jira integration" in str(e):
-                raise HTTPException(
-                    status_code=500, 
-                    detail="Jira integration not configured. Please set NEGISHI_JIRA_API_TOKEN, NEGISHI_JIRA_EMAIL, and NEGISHI_JIRA_BASE_URL environment variables."
-                )
-            else:
-                raise HTTPException(status_code=500, detail=f"Error connecting to Jira: {str(e)}")
+            return {"message": f"Could not retrieve story {story_id} from Jira", "error": str(e)}, 500
         
         # Extract story details
         fields = story_data.get('fields', {})
@@ -470,12 +353,7 @@ def create_workflow_from_jira(story_id: str, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(workflow)
         
-        return {
-            "message": f"Workflow created successfully for {story_id}",
-            "workflow_id": workflow.id,
-            "story_id": story_id,
-            "title": title
-        }
+        return {"message": f"Workflow created successfully for {story_id}", "workflow_id": workflow.id}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating workflow from Jira: {str(e)}")
