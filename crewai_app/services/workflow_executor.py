@@ -18,7 +18,7 @@ class WorkflowExecutor:
         self.running_workflows: Dict[int, Dict[str, Any]] = {}
         self._lock = threading.Lock()
     
-    def execute_workflow_async(self, workflow_id: int) -> Dict[str, Any]:
+    def execute_workflow_async(self, workflow_id: int, execution_id: Optional[int] = None) -> Dict[str, Any]:
         """Start workflow execution in background and return immediately"""
         
         # Check if workflow is already running
@@ -33,7 +33,7 @@ class WorkflowExecutor:
         # Start background thread
         thread = threading.Thread(
             target=self._execute_workflow_background,
-            args=(workflow_id,),
+            args=(workflow_id, execution_id),
             daemon=True
         )
         thread.start()
@@ -54,13 +54,14 @@ class WorkflowExecutor:
             "status": "running"
         }
     
-    def _execute_workflow_background(self, workflow_id: int):
+    def _execute_workflow_background(self, workflow_id: int, execution_id: Optional[int] = None):
         """Execute workflow in background thread"""
         try:
             logger.info(f"[WorkflowExecutor] Starting background execution for workflow {workflow_id}")
             
             # Get database session
             db = next(get_db())
+            from crewai_app.database import Execution, LLMCall
             workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
             
             if not workflow:
@@ -122,6 +123,44 @@ class WorkflowExecutor:
                             )
                             db.add(code_file)
             
+            # Aggregate metrics if we have an execution_id
+            if execution_id:
+                # Sum metrics from normalized LLMCall rows
+                conv_ids = [c.id for c in db.query(Conversation.id).filter(Conversation.workflow_id == workflow_id).all()]
+                total_calls = db.query(LLMCall).filter(LLMCall.conversation_id.in_(conv_ids)).count() if conv_ids else 0
+                total_tokens = 0
+                avg_latency = 0
+                models: Dict[str, int] = {}
+                if conv_ids:
+                    from sqlalchemy import func
+                    agg = db.query(
+                        func.coalesce(func.sum(LLMCall.total_tokens), 0),
+                        func.coalesce(func.avg(LLMCall.response_time_ms), 0)
+                    ).filter(LLMCall.conversation_id.in_(conv_ids)).one()
+                    total_tokens = int(agg[0] or 0)
+                    avg_latency = int(agg[1] or 0)
+                    rows = db.query(LLMCall.model, func.count(LLMCall.id)).\
+                        filter(LLMCall.conversation_id.in_(conv_ids)).group_by(LLMCall.model).all()
+                    models = {m or "unknown": c for m, c in rows}
+                # Cost as string sum
+                cost_rows = db.query(LLMCall.cost).filter(LLMCall.conversation_id.in_(conv_ids)).all() if conv_ids else []
+                cost_total = 0.0
+                for (c,) in cost_rows:
+                    try:
+                        cost_total += float(c or 0)
+                    except Exception:
+                        pass
+                ex = db.query(Execution).filter(Execution.id == execution_id).first()
+                if ex:
+                    ex.status = "completed"
+                    ex.finished_at = datetime.utcnow()
+                    ex.total_calls = total_calls
+                    ex.total_tokens = total_tokens
+                    ex.total_cost = f"{cost_total:.4f}"
+                    ex.avg_latency_ms = avg_latency
+                    ex.models = list(models.keys())
+                    db.commit()
+
             # Update workflow status to completed
             workflow.status = "completed"
             db.commit()
@@ -131,13 +170,20 @@ class WorkflowExecutor:
         except Exception as e:
             logger.error(f"[WorkflowExecutor] Background execution failed for workflow {workflow_id}: {e}")
             
-            # Update workflow status to error
+            # Update workflow status to error and mark execution failed if present
             try:
                 db = next(get_db())
+                from crewai_app.database import Workflow, Execution
                 workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
                 if workflow:
                     workflow.status = "error"
                     db.commit()
+                if execution_id:
+                    ex = db.query(Execution).filter(Execution.id == execution_id).first()
+                    if ex:
+                        ex.status = "failed"
+                        ex.finished_at = datetime.utcnow()
+                        db.commit()
             except Exception as db_error:
                 logger.error(f"[WorkflowExecutor] Failed to update workflow status: {db_error}")
         

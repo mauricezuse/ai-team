@@ -28,6 +28,7 @@ class Workflow(Base):
     # Relationships
     conversations = relationship("Conversation", back_populates="workflow", cascade="all, delete-orphan")
     code_files = relationship("CodeFile", back_populates="workflow", cascade="all, delete-orphan")
+    executions = relationship("Execution", back_populates="workflow", cascade="all, delete-orphan")
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -113,6 +114,24 @@ class LLMCall(Base):
     
     # Relationships
     conversation = relationship("Conversation")
+
+class Execution(Base):
+    __tablename__ = "executions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id"), index=True)
+    status = Column(String, default="pending")  # pending|running|completed|failed
+    started_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime)
+    total_calls = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    total_cost = Column(String, default="0.00")
+    avg_latency_ms = Column(Integer, default=0)
+    models = Column(JSON, default=list)  # list of models used
+    meta = Column(JSON, default=dict)  # prompt/config hashes, flags, etc.
+    
+    # Relationships
+    workflow = relationship("Workflow", back_populates="executions")
 
 # Database functions
 def get_db():

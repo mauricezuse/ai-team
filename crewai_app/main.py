@@ -17,6 +17,7 @@ from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.config import settings
 from crewai_app.database import get_db, init_database, Workflow, Conversation, CodeFile, Escalation, Collaboration
 from crewai_app.database import LLMCall
+from crewai_app.database import Execution
 from crewai_app.utils.feature_flags import FeatureFlags
 
 app = FastAPI(title="CrewAI Orchestration Platform")
@@ -505,6 +506,80 @@ def get_running_workflows():
     """Get all currently running workflows"""
     from crewai_app.services.workflow_executor import workflow_executor
     return workflow_executor.get_running_workflows()
+
+# --- Executions API ---
+class ExecutionResponse(BaseModel):
+    id: int
+    workflow_id: int
+    status: str
+    started_at: datetime
+    finished_at: Optional[datetime] = None
+    total_calls: int = 0
+    total_tokens: int = 0
+    total_cost: str = "0.00"
+    avg_latency_ms: int = 0
+    models: List[str] = []
+    meta: Dict[str, Any] = {}
+
+    class Config:
+        from_attributes = True
+
+@app.get("/workflows/{workflow_id:int}/executions", response_model=List[ExecutionResponse])
+def list_executions(workflow_id: int, db: Session = Depends(get_db)):
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    execs = db.query(Execution).filter(Execution.workflow_id == workflow_id).order_by(Execution.started_at.desc()).all()
+    return execs
+
+@app.get("/workflows/{workflow_id:int}/executions/{execution_id:int}", response_model=ExecutionResponse)
+def get_execution(workflow_id: int, execution_id: int, db: Session = Depends(get_db)):
+    ex = db.query(Execution).filter(Execution.id == execution_id, Execution.workflow_id == workflow_id).first()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return ex
+
+@app.post("/workflows/{workflow_id:int}/executions/start", response_model=ExecutionResponse)
+def start_execution(workflow_id: int, db: Session = Depends(get_db)):
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    ex = Execution(workflow_id=workflow_id, status="running", started_at=datetime.utcnow())
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
+    # Kick background executor
+    from crewai_app.services.workflow_executor import workflow_executor
+    workflow_executor.execute_workflow_async(workflow_id, execution_id=ex.id)
+    return ex
+
+@app.get("/workflows/{workflow_id:int}/executions/compare")
+def compare_executions(workflow_id: int, execA: int = Query(...), execB: int = Query(...), db: Session = Depends(get_db)):
+    def get_exec(ex_id: int) -> Execution:
+        ex = db.query(Execution).filter(Execution.id == ex_id, Execution.workflow_id == workflow_id).first()
+        if not ex:
+            raise HTTPException(status_code=404, detail=f"Execution {ex_id} not found")
+        return ex
+    a = get_exec(execA)
+    b = get_exec(execB)
+    def to_dict(e: Execution):
+        return {
+            "id": e.id,
+            "workflow_id": e.workflow_id,
+            "total_calls": e.total_calls or 0,
+            "total_tokens": e.total_tokens or 0,
+            "total_cost": e.total_cost or "0.00",
+            "avg_latency_ms": e.avg_latency_ms or 0,
+            "models": e.models or [],
+        }
+    left = to_dict(a)
+    right = to_dict(b)
+    deltas = {
+        "total_calls": (right["total_calls"] - left["total_calls"]),
+        "total_tokens": (right["total_tokens"] - left["total_tokens"]),
+        "avg_latency_ms": (right["avg_latency_ms"] - left["avg_latency_ms"]),
+    }
+    return {"left": left, "right": right, "deltas": deltas}
 
 @app.post("/workflows/from-jira/{story_id}")
 def create_workflow_from_jira(story_id: str, db: Session = Depends(get_db)):
