@@ -15,8 +15,13 @@ class TesterTool(BaseTool):
         super().__init__()
         self._openai_service = openai_service
 
-    def _run(self, prompt: str) -> str:
-        return self._openai_service.generate(prompt, step="tester.test")
+    def _run(self, prompt: str, workflow_id=None, conversation_id=None) -> str:
+        return self._openai_service.generate(
+            prompt, 
+            step="tester.test",
+            workflow_id=workflow_id,
+            conversation_id=conversation_id
+        )
 
     def greet(self):
         return self._run("Say hello from the Tester agent!")
@@ -68,7 +73,7 @@ class TesterAgent:
         self._cache_set(prompt_hash, file_paths)
         return file_paths
 
-    def prepare_and_run_tests(self, implementation_result, plan, rules, codebase_index):
+    def prepare_and_run_tests(self, implementation_result, plan, rules, codebase_index, workflow_id=None, conversation_id=None):
         # Two-stage: first select relevant files, then generate tests
         selected_files = self.select_relevant_files(implementation_result, plan, codebase_index)
         files_to_test = []
@@ -97,7 +102,7 @@ class TesterAgent:
                 f"Code:\n{file_entry['code']}\n"
                 f"Rules: {rules}\n"
             )
-            test_code = tester_tool._run(prompt)
+            test_code = tester_tool._run(prompt, workflow_id, conversation_id)
             file_entry['test_code'] = test_code
             file_entry['test_location'] = test_location
         if files_to_test:

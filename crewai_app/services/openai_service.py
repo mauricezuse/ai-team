@@ -104,7 +104,7 @@ class OpenAIService:
         except Exception:
             return len(prompt.split())
 
-    def generate(self, prompt: str, max_tokens: int = 512, deployment: Optional[str] = None, step: Optional[str] = None) -> str:
+    def generate(self, prompt: str, max_tokens: int = 512, deployment: Optional[str] = None, step: Optional[str] = None, workflow_id: Optional[int] = None, conversation_id: Optional[int] = None) -> str:
         prompt_length = self.count_tokens(prompt)
         logging.info(f"[OpenAIService] Prompt size: {prompt_length} tokens (max {MAX_PROMPT_TOKENS}) at step '{step}'")
         if prompt_length > MAX_PROMPT_TOKENS * 0.9:
@@ -141,6 +141,8 @@ class OpenAIService:
         }
         # Generate a unique request ID for traceability
         request_id = str(uuid.uuid4())
+        start_time = time.time()
+        
         # Log the payload before making the call
         log_entry = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -182,6 +184,19 @@ class OpenAIService:
                 usage = getattr(response, 'usage', None)
                 if usage:
                     usage_logger.info(f"[RESPONSE] model={model_name} prompt_tokens={getattr(usage, 'prompt_tokens', None)} completion_tokens={getattr(usage, 'completion_tokens', None)} total_tokens={getattr(usage, 'total_tokens', None)}")
+                
+                # Capture LLM call data for database storage
+                if workflow_id and conversation_id:
+                    self._capture_llm_call(
+                        workflow_id=workflow_id,
+                        conversation_id=conversation_id,
+                        model=deployment_name,
+                        prompt=prompt,
+                        response=response,
+                        start_time=start_time,
+                        request_id=request_id
+                    )
+                
                 # Ensure we always return a string
                 if response.choices and response.choices[0].message and response.choices[0].message.content:
                     return response.choices[0].message.content
@@ -226,4 +241,91 @@ class OpenAIService:
                 raise
         logging.error("OpenAIService: Exceeded max retries for OpenAI API call.")
         usage_logger.error(f"[FAILED] model={deployment_name} Exceeded max retries for OpenAI API call.")
-        raise RuntimeError("OpenAIService: Exceeded max retries for OpenAI API call.") 
+        raise RuntimeError("OpenAIService: Exceeded max retries for OpenAI API call.")
+    
+    def _capture_llm_call(self, workflow_id: int, conversation_id: int, model: str, prompt: str, response, start_time: float, request_id: str):
+        """Capture LLM call data and store in database"""
+        try:
+            from crewai_app.database import get_db, Conversation, LLMCall
+            import json
+            from datetime import datetime
+            
+            # Calculate response time
+            response_time_ms = int((time.time() - start_time) * 1000)
+            
+            # Extract usage data
+            usage = getattr(response, 'usage', None)
+            prompt_tokens = getattr(usage, 'prompt_tokens', 0) if usage else 0
+            completion_tokens = getattr(usage, 'completion_tokens', 0) if usage else 0
+            total_tokens = getattr(usage, 'total_tokens', 0) if usage else 0
+            
+            # Calculate cost (approximate GPT-4 pricing)
+            cost_per_1k_tokens = 0.03  # $0.03 per 1K tokens for GPT-4
+            cost = (total_tokens / 1000) * cost_per_1k_tokens
+            
+            # Prepare request and response data
+            request_data = {
+                "messages": [{"role": "user", "content": prompt}],
+                "model": model,
+                "max_tokens": getattr(response, 'max_tokens', 512)
+            }
+            
+            response_data = {
+                "content": response.choices[0].message.content if response.choices and response.choices[0].message else "",
+                "usage": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens
+                }
+            }
+            
+            # Get database session
+            db = next(get_db())
+            
+            # Create LLMCall record
+            llm_call = LLMCall(
+                conversation_id=conversation_id,
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                cost=f"{cost:.4f}",
+                response_time_ms=response_time_ms,
+                request_data=request_data,
+                response_data=response_data
+            )
+            db.add(llm_call)
+            
+            # Update conversation with aggregated data
+            conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+            if conversation:
+                # Update or create llm_calls JSON array
+                existing_calls = conversation.llm_calls if conversation.llm_calls else []
+                if isinstance(existing_calls, str):
+                    existing_calls = json.loads(existing_calls)
+                
+                # Add new call to the array
+                new_call_data = {
+                    "model": model,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "cost": f"{cost:.4f}",
+                    "response_time_ms": response_time_ms,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "request_data": request_data,
+                    "response_data": response_data
+                }
+                existing_calls.append(new_call_data)
+                
+                # Update conversation
+                conversation.llm_calls = existing_calls
+                conversation.total_tokens_used = (conversation.total_tokens_used or 0) + total_tokens
+                conversation.total_cost = f"{(float(conversation.total_cost or 0) + cost):.4f}"
+            
+            db.commit()
+            logging.info(f"[OpenAIService] Captured LLM call: {model}, {total_tokens} tokens, ${cost:.4f}")
+            
+        except Exception as e:
+            logging.error(f"[OpenAIService] Failed to capture LLM call data: {e}")
+            # Don't raise exception to avoid breaking the main workflow 
