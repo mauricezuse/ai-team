@@ -192,19 +192,39 @@ export class WorkflowStatusChannelService {
    * Connect to real-time event stream (logs + conversation events)
    */
   connectEventStream(workflowId: number, onEvent: (evt: any) => void): { close: () => void } {
-    const source = new EventSource(`${this.streamUrl}/workflows/${workflowId}/stream`);
-    source.onmessage = (evt) => {
-      try {
-        const data = JSON.parse(evt.data);
-        onEvent(data);
-      } catch (e) {
-        console.error('[WorkflowStatusChannel] stream parse error', e);
+    let retries = 0;
+    let source: EventSource | null = null;
+
+    const connect = () => {
+      if (source) {
+        try { source.close(); } catch {}
       }
+      source = new EventSource(`${this.streamUrl}/workflows/${workflowId}/stream`);
+      source.onopen = () => {
+        retries = 0;
+        console.log(`[WorkflowStatusChannel] stream connected for workflow ${workflowId}`);
+      };
+      source.onmessage = (evt) => {
+        // SSE keep-alive pings start with ':' and have no data JSON; ignore
+        if (!evt || !evt.data) return;
+        try {
+          const data = JSON.parse(evt.data);
+          onEvent(data);
+        } catch (e) {
+          console.error('[WorkflowStatusChannel] stream parse error', e);
+        }
+      };
+      source.onerror = (err) => {
+        console.error('[WorkflowStatusChannel] stream error', err);
+        // Exponential backoff retry up to a ceiling
+        retries += 1;
+        const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(retries, 5)));
+        setTimeout(connect, delay);
+      };
     };
-    source.onerror = (err) => {
-      console.error('[WorkflowStatusChannel] stream error', err);
-    };
-    return { close: () => source.close() };
+
+    connect();
+    return { close: () => { if (source) source.close(); } };
   }
 
   private connectPolling(workflowId: number, stopSubject: Subject<void>, config: StatusChannelConfig): void {

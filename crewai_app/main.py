@@ -591,20 +591,32 @@ async def sse_endpoint(workflow_id: int):
 @app.get("/events/workflows/{workflow_id}/stream")
 async def sse_event_stream(workflow_id: int):
     async def event_generator():
+        ping_interval_seconds = 10
+        last_ping = asyncio.get_event_loop().time()
         while True:
-            # Try to fetch an event from the queue
-            evt = try_get_event(workflow_id, timeout_seconds=0.1)
-            if evt is not None:
-                yield f"data: {json.dumps(evt)}\n\n"
-            else:
-                # Keep-alive ping every few seconds
-                await asyncio.sleep(0.9)
+            try:
+                evt = try_get_event(workflow_id, timeout_seconds=0.25)
+                if evt is not None:
+                    yield f"data: {json.dumps(evt)}\n\n"
+                # Periodic keep-alive comment to prevent intermediaries from closing idle connections
+                now = asyncio.get_event_loop().time()
+                if now - last_ping >= ping_interval_seconds:
+                    last_ping = now
+                    # Comment line as SSE heartbeat; safe to ignore client-side
+                    yield f": ping\n\n"
+                await asyncio.sleep(0.25)
+            except Exception as e:
+                # Emit an error event then break; client should reconnect
+                err_evt = {"type": "error", "message": f"stream error: {str(e)}"}
+                yield f"data: {json.dumps(err_evt)}\n\n"
+                break
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "Cache-Control"
         }
