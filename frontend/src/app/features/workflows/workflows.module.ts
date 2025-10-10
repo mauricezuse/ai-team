@@ -16,7 +16,7 @@ import { CreateWorkflowComponent } from './create-workflow.component';
       { path: '', component: WorkflowsListComponent },
       { path: 'create', component: CreateWorkflowComponent },
       { path: ':id', component: WorkflowDetailComponent },
-      { path: ':id/advanced', loadChildren: () => import('../workflows-advanced/workflows-advanced.module').then(m => m.WorkflowsAdvancedModule) }
+      // Advanced route removed; unified UI in workflow-detail tabs
     ])
   ]
 })

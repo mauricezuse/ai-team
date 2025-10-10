@@ -25,10 +25,6 @@
       <span class="p-chip" [class]="'p-chip-' + connectionType">{{ connectionType }}</span>
     </p>
     <p>
-      <a [routerLink]="['/workflows', wf.id, 'advanced']" class="p-button p-button-outlined" data-testid="advanced-view-link">
-        Advanced View
-      </a>
-      &nbsp;
       <button pButton type="button" label="Start New Execution" icon="pi pi-play" class="p-button-info" (click)="startNewExecution()" data-testid="start-execution"></button>
       &nbsp;
       <button pButton type="button" label="Reconcile Status" icon="pi pi-refresh" class="p-button-warning" (click)="reconcileStatus()" data-testid="reconcile-status" *ngIf="wf.status === 'running'"></button>
@@ -265,7 +261,7 @@
                           </div>
                         </div>
                 <div style="margin-top: .5rem;">
-                  <a [routerLink]="['/workflows', wf.id, 'advanced', 'llm-calls']" [queryParams]="{ conversationId: conversation.id }" data-testid="open-llm-calls-from-detail">Open in LLM Calls</a>
+                  <a (click)="$event.preventDefault(); activeTabIndex = 3; llmSelectedConvId = conversation.id" href="#" data-testid="open-llm-calls-from-detail">Open in LLM Calls</a>
                 </div>
                       </div>
                     </div>
