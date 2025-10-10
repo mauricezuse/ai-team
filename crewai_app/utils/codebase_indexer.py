@@ -66,6 +66,13 @@ EMBEDDING_CACHE_FILE = 'embedding_cache.json'
 # --- Plugin system for file selection/indexing ---
 PLUGIN_REGISTRY: dict[str, Callable] = {}
 
+# --- Codebase root resolution ---
+CODEBASE_ROOT_DIR: str = os.getcwd()
+
+def set_codebase_root(root_dir: str) -> None:
+    global CODEBASE_ROOT_DIR
+    CODEBASE_ROOT_DIR = root_dir or CODEBASE_ROOT_DIR
+
 def register_plugin(name: str):
     def decorator(func):
         PLUGIN_REGISTRY[name] = func

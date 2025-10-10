@@ -144,7 +144,7 @@ class StoryImplementationWorkflow:
             if last_step is None:
                 try:
                     # Only index backend and frontend directories
-                    tree = build_directory_tree(self.codebase_root, allowed_dirs=['backend', 'frontend'])
+                    tree = build_directory_tree(self.codebase_root, allowed_dirs=['backend', 'frontend', 'backend/apps'])
                 except Exception:
                     tree = None
                 try:

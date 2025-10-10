@@ -467,7 +467,8 @@ class EnhancedStoryWorkflow:
         print('[EnhancedWorkflow] Indexing codebase...')
         
         try:
-            tree = build_directory_tree(self.codebase_root, allowed_dirs=['backend', 'frontend'])
+            # Include common monorepo-style layouts
+            tree = build_directory_tree(self.codebase_root, allowed_dirs=['backend', 'frontend', 'backend/apps'])
             selected_files = agent_select_relevant_files(tree, self.story_id, agent=None, plugin='semantic')
             codebase_index = index_selected_files_async(self.codebase_root, selected_files)
             # Cache for later tester use
