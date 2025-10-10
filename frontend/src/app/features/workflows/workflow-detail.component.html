@@ -310,6 +310,51 @@
         <p>No escalations</p>
       </div>
     </p-tabPanel>
+
+    <p-tabPanel header="Code Diffs" data-testid="tab-code-diffs">
+      <div *ngIf="allCodeFiles.length > 0">
+        <p-accordion>
+          <p-accordionTab *ngFor="let file of allCodeFiles" [header]="getFileDisplayName(file)">
+            <div class="code-file-content">
+              <div class="code-file-header">
+                <span class="file-name">
+                  <i class="pi pi-file"></i> {{ getFileDisplayName(file) }}
+                </span>
+                <span class="file-path">{{ getFilePath(file) }}</span>
+                <a [href]="getFileUrl(file)" target="_blank" class="file-link">
+                  <i class="pi pi-external-link"></i> View in Repository
+                </a>
+              </div>
+              <div class="code-preview">
+                <pre><code>{{ getCodePreview(file) }}</code></pre>
+              </div>
+            </div>
+          </p-accordionTab>
+        </p-accordion>
+      </div>
+      <div *ngIf="allCodeFiles.length === 0">
+        <p>No code changes detected yet</p>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="PR & Checks" data-testid="tab-pr-checks">
+      <div *ngIf="prInfo.url; else prMissing">
+        <p><strong>Pull Request:</strong> <a [href]="prInfo.url" target="_blank">{{ prInfo.url }}</a></p>
+        <div class="checks">
+          <p><em>Required status checks:</em> Not available yet — backend integration pending.</p>
+        </div>
+      </div>
+      <ng-template #prMissing>
+        <p *ngIf="prInfo.skippedReason; else noPrInfo">PR skipped: {{ prInfo.skippedReason }}</p>
+        <ng-template #noPrInfo>
+          <p>No PR information available yet</p>
+        </ng-template>
+      </ng-template>
+    </p-tabPanel>
+
+    <p-tabPanel header="Artifacts" data-testid="tab-artifacts">
+      <p>No artifacts available yet</p>
+    </p-tabPanel>
   </p-tabView>
 
   <div *ngIf="wf.conversations && wf.conversations.length > 0" class="conversations-section" data-testid="conversations">
