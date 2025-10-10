@@ -947,7 +947,8 @@ def get_workflow_pr(workflow_id: int, db: Session = Depends(get_db)):
         except Exception:
             pass
         return PullRequestResponse(url=url)
-    raise HTTPException(status_code=404, detail="PR not found")
+    # Do not 404; return empty payload so frontend can handle gracefully
+    return PullRequestResponse()
 
 @app.get("/workflows/{workflow_id:int}/pr/checks", response_model=List[CheckRunResponse])
 def list_pr_checks(workflow_id: int, db: Session = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200)):
