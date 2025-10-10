@@ -72,6 +72,45 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  refreshPrChecks() {
+    if (!this.workflowId) return;
+    this.advancedService.refreshPrChecks(String(this.workflowId)).subscribe({
+      next: () => {
+        this.advancedService.listPrChecks(String(this.workflowId), { page: 1, page_size: 50 }).subscribe(checks => {
+          this.prChecks = checks || [];
+          this.messageService.add({ severity: 'success', summary: 'Refreshed', detail: 'PR & Checks updated' });
+        });
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to refresh PR & Checks' })
+    });
+  }
+
+  refreshDiffs() {
+    if (!this.workflowId) return;
+    this.advancedService.refreshDiffs(String(this.workflowId)).subscribe({
+      next: () => {
+        this.advancedService.listDiffs(String(this.workflowId), { page: 1, page_size: 100 }).subscribe(diffs => {
+          this.diffs = diffs || [];
+          this.messageService.add({ severity: 'success', summary: 'Refreshed', detail: 'Diffs updated' });
+        });
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to refresh diffs' })
+    });
+  }
+
+  refreshArtifacts() {
+    if (!this.workflowId) return;
+    this.advancedService.refreshArtifacts(String(this.workflowId)).subscribe({
+      next: () => {
+        this.advancedService.listArtifacts(String(this.workflowId), { page: 1, page_size: 50 }).subscribe(arts => {
+          this.artifacts = arts || [];
+          this.messageService.add({ severity: 'success', summary: 'Refreshed', detail: 'Artifacts updated' });
+        });
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to refresh artifacts' })
+    });
+  }
+
   ngOnDestroy() {
     if (this.statusSubscription) {
       this.statusSubscription.unsubscribe();

@@ -348,8 +348,14 @@
             </p-accordionTab>
           </p-accordion>
         </div>
+        <div class="actions" style="margin-top: .5rem;">
+          <button pButton type="button" label="Refresh Diffs" icon="pi pi-refresh" (click)="refreshDiffs()"></button>
+        </div>
         <ng-template #noDiffs>
           <p>No code changes detected yet</p>
+          <div class="actions" style="margin-top: .5rem;">
+            <button pButton type="button" label="Refresh Diffs" icon="pi pi-refresh" (click)="refreshDiffs()"></button>
+          </div>
         </ng-template>
       </div>
     </p-tabPanel>
@@ -383,7 +389,13 @@
         </div>
         <ng-template #noChecks>
           <p>No checks available yet</p>
+          <div class="actions" style="margin-top: .5rem;">
+            <button pButton type="button" label="Refresh PR & Checks" icon="pi pi-refresh" (click)="refreshPrChecks()"></button>
+          </div>
         </ng-template>
+        <div class="actions" style="margin-top: .5rem;">
+          <button pButton type="button" label="Refresh PR & Checks" icon="pi pi-refresh" (click)="refreshPrChecks()"></button>
+        </div>
       </div>
       <ng-template #prMissing>
         <p *ngIf="prInfo.skippedReason; else noPrInfo">PR skipped: {{ prInfo.skippedReason }}</p>
@@ -416,9 +428,15 @@
             </tr>
           </tbody>
         </table>
+        <div class="actions" style="margin-top: .5rem;">
+          <button pButton type="button" label="Refresh Artifacts" icon="pi pi-refresh" (click)="refreshArtifacts()"></button>
+        </div>
       </div>
       <ng-template #noArtifacts>
         <p>No artifacts available yet</p>
+        <div class="actions" style="margin-top: .5rem;">
+          <button pButton type="button" label="Refresh Artifacts" icon="pi pi-refresh" (click)="refreshArtifacts()"></button>
+        </div>
       </ng-template>
     </p-tabPanel>
   </p-tabView>

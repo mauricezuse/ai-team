@@ -83,6 +83,19 @@ export class WorkflowAdvancedService {
     }
     return this.http.get<any[]>(`/api/workflows/${workflowId}/artifacts`, { params: httpParams });
   }
+
+  // New: enqueue background refreshes
+  refreshPrChecks(workflowId: string): Observable<any> {
+    return this.http.post<any>(`/api/workflows/${workflowId}/pr/refresh`, {});
+  }
+
+  refreshDiffs(workflowId: string): Observable<any> {
+    return this.http.post<any>(`/api/workflows/${workflowId}/diffs/refresh`, {});
+  }
+
+  refreshArtifacts(workflowId: string): Observable<any> {
+    return this.http.post<any>(`/api/workflows/${workflowId}/artifacts/refresh`, {});
+  }
 }
 
 
