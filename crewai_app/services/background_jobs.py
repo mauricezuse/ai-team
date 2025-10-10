@@ -2,6 +2,7 @@ from typing import Optional
 from datetime import datetime
 
 from .github_service import GitHubService
+from ..config import settings
 from ..database import SessionLocal, Workflow, PullRequest, CheckRun, Diff, Artifact
 from ..utils.logger import logger
 
@@ -18,7 +19,7 @@ def refresh_pr_and_checks(workflow_id: int) -> None:
             logger.warning(f"refresh_pr_and_checks: workflow {workflow_id} not found")
             return
 
-        gh = GitHubService()
+        gh = GitHubService(use_real=settings.use_real_github)
         pr_data = gh.get_workflow_pr(workflow)
         if pr_data:
             pr_row = db.query(PullRequest).filter(PullRequest.workflow_id == workflow_id, PullRequest.pr_number == pr_data.get('number')).first()
@@ -65,7 +66,7 @@ def refresh_diffs(workflow_id: int) -> None:
         if not workflow:
             logger.warning(f"refresh_diffs: workflow {workflow_id} not found")
             return
-        gh = GitHubService()
+        gh = GitHubService(use_real=settings.use_real_github)
         diffs = gh.get_workflow_diffs(workflow)
         for d in diffs or []:
             row = Diff(
@@ -90,7 +91,7 @@ def refresh_artifacts(workflow_id: int) -> None:
         if not workflow:
             logger.warning(f"refresh_artifacts: workflow {workflow_id} not found")
             return
-        gh = GitHubService()
+        gh = GitHubService(use_real=settings.use_real_github)
         arts = gh.list_workflow_artifacts(workflow)
         for a in arts or []:
             row = Artifact(
