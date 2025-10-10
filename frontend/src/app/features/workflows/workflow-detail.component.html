@@ -92,6 +92,28 @@
             </tr>
           </tbody>
         </table>
+        <div class="exec-compare" style="margin-top: 1rem;">
+          <h4>Compare Executions</h4>
+          <div *ngIf="wf.executions.length > 1; else noCompare">
+            <label for="execA">Execution A:</label>
+            <select id="execA" [(ngModel)]="execA">
+              <option *ngFor="let ex of wf.executions" [ngValue]="ex.id">#{{ ex.id }}</option>
+            </select>
+            &nbsp;&nbsp;
+            <label for="execB">Execution B:</label>
+            <select id="execB" [(ngModel)]="execB">
+              <option *ngFor="let ex of wf.executions" [ngValue]="ex.id">#{{ ex.id }}</option>
+            </select>
+            &nbsp;&nbsp;
+            <button pButton type="button" label="Compare" (click)="compareExecutions()"></button>
+            <div *ngIf="execCompareResult" style="margin-top: .5rem;">
+              <pre>{{ execCompareResult | json }}</pre>
+            </div>
+          </div>
+          <ng-template #noCompare>
+            <p>No executions yet</p>
+          </ng-template>
+        </div>
       </div>
       <div *ngIf="!wf || !wf.executions || (wf.executions.length === 0)">
         <p>No executions yet</p>

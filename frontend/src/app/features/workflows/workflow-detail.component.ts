@@ -47,6 +47,10 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   llmConversations: Array<{ id: number; label: string; calls: any[] }> = [];
   llmSelectedConvId: number | null = null;
   escalationsList: Array<{ from_agent: string; to_agent: string; reason: string; status: string }> = [];
+  // Executions compare UI state
+  execA: number | null = null;
+  execB: number | null = null;
+  execCompareResult: any | null = null;
 
   constructor(
     private route: ActivatedRoute, 
@@ -250,6 +254,21 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     if (!this.llmSelectedConvId) return [];
     const found = this.llmConversations.find(x => x.id === this.llmSelectedConvId);
     return found ? (found.calls || []) : [];
+  }
+
+  compareExecutions() {
+    if (!this.workflowId || !this.execA || !this.execB) {
+      this.execCompareResult = null;
+      return;
+    }
+    this.advancedService.compareExecutions(String(this.workflowId), this.execA, this.execB).subscribe({
+      next: (res) => {
+        this.execCompareResult = res;
+      },
+      error: () => {
+        this.execCompareResult = { error: 'Failed to compare executions' };
+      }
+    });
   }
 
   filterConversations() {
