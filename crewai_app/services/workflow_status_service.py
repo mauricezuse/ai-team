@@ -8,14 +8,15 @@ from typing import Dict, Any, Optional, Set
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from crewai_app.database import get_db, Workflow
+from crewai_app.config import settings
 from crewai_app.utils.logger import logger
 
 class WorkflowStatusService:
     """Manages workflow status with heartbeat and finalization"""
     
     def __init__(self):
-        self.heartbeat_interval = 30  # seconds
-        self.heartbeat_timeout = 300  # 5 minutes
+        self.heartbeat_interval = settings.heartbeat_interval_seconds
+        self.heartbeat_timeout = settings.heartbeat_timeout_seconds
         self._heartbeat_threads: Dict[int, threading.Thread] = {}
         self._stop_heartbeat = threading.Event()
         self._lock = threading.Lock()
@@ -163,7 +164,8 @@ class WorkflowStatusService:
             ).all()
             
             for workflow in stale_workflows:
-                logger.warning(f"[WorkflowStatusService] Marking stale workflow {workflow.id} as failed")
+                seconds = (datetime.utcnow() - (workflow.last_heartbeat_at or workflow.started_at or datetime.utcnow())).total_seconds()
+                logger.warning(f"[WorkflowStatusService] Marking stale workflow {workflow.id} as failed after {int(seconds)}s since last heartbeat")
                 self.finalize_workflow_status(
                     workflow.id,
                     "failed",

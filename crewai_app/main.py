@@ -512,11 +512,16 @@ def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
             "status": "running"
         }
     
+    # Ensure an execution row exists for observability
+    ex = Execution(workflow_id=workflow_id, status="running", started_at=datetime.utcnow())
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
     # Start background execution
     from crewai_app.services.workflow_executor import workflow_executor
-    result = workflow_executor.execute_workflow_async(workflow_id)
+    result = workflow_executor.execute_workflow_async(workflow_id, execution_id=ex.id)
     
-    return result
+    return {**result, "execution_id": ex.id}
 
 @app.post("/workflows/{workflow_id}/execute")
 def execute_workflow_file(workflow_id: str, story_id: Optional[str] = Query(None)):

@@ -21,5 +21,7 @@ class Settings(BaseSettings):
     use_real_github: bool = os.getenv("USE_REAL_GITHUB", "false").lower() == "true"
     use_real_jira: bool = os.getenv("USE_REAL_JIRA", "false").lower() == "true"
     github_webhook_secret: Optional[str] = os.getenv("GITHUB_WEBHOOK_SECRET")
+    heartbeat_interval_seconds: int = int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "15"))
+    heartbeat_timeout_seconds: int = int(os.getenv("HEARTBEAT_TIMEOUT_SECONDS", "120"))
 
 settings = Settings() 

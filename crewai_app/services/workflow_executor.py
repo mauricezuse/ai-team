@@ -12,6 +12,8 @@ from crewai_app.services.jira_service import JiraService
 from crewai_app.services.workflow_status_service import workflow_status_service
 from crewai_app.utils.logger import logger
 from crewai_app.services.event_stream import post_event
+from crewai_app.database import SessionLocal
+import threading as _threading
 
 class WorkflowExecutor:
     """Manages background workflow execution"""
@@ -76,8 +78,23 @@ class WorkflowExecutor:
             workflow.started_at = datetime.utcnow()
             db.commit()
             
-            # Start heartbeat tracking
+            # Start heartbeat tracking (service thread) and a local pinger as extra safety
             workflow_status_service.start_workflow_heartbeat(workflow_id)
+            pinger_stop = _threading.Event()
+            def _pinger():
+                while not pinger_stop.is_set():
+                    try:
+                        dbp = SessionLocal()
+                        wf = dbp.query(Workflow).filter(Workflow.id == workflow_id).first()
+                        if wf and wf.status == 'running':
+                            wf.last_heartbeat_at = datetime.utcnow()
+                            dbp.commit()
+                        dbp.close()
+                    except Exception as _e:
+                        logger.debug(f"[WorkflowExecutor] Heartbeat pinger error: {_e}")
+                    time.sleep(10)
+            pinger_thread = _threading.Thread(target=_pinger, daemon=True)
+            pinger_thread.start()
             post_event(workflow_id, {"type": "status", "status": "running"})
             
             # Check if we should use real Jira or mock data
@@ -206,7 +223,7 @@ class WorkflowExecutor:
                     datetime.utcnow(),
                     str(e)
                 )
-            post_event(workflow_id, {"type": "status", "status": "failed"})
+                post_event(workflow_id, {"type": "status", "status": "failed"})
                 
                 # Update execution status if present
                 if execution_id:
@@ -221,6 +238,10 @@ class WorkflowExecutor:
                 logger.error(f"[WorkflowExecutor] Failed to finalize workflow status: {db_error}")
         
         finally:
+            try:
+                pinger_stop.set()
+            except Exception:
+                pass
             # Remove from running workflows
             with self._lock:
                 if workflow_id in self.running_workflows:
