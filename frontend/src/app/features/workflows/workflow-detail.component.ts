@@ -12,13 +12,14 @@ import { ChipModule } from 'primeng/chip';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { AccordionModule } from 'primeng/accordion';
+import { TabViewModule } from 'primeng/tabview';
 import { Subscription } from 'rxjs';
 import { WorkflowResponse, WorkflowStatusInfo, ConnectionType } from '../../core/models/workflow-status.model';
 
 @Component({
   selector: 'app-workflow-detail',
   standalone: true,
-  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule, RouterModule],
+  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule, TabViewModule, RouterModule],
   providers: [MessageService],
   templateUrl: './workflow-detail.component.html',
   styleUrl: './workflow-detail.component.scss'
@@ -36,6 +37,9 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   connectionType: ConnectionType | undefined;
   statusSubscription: Subscription | null = null;
   workflowId: number | null = null;
+  
+  // UI state
+  activeTabIndex: number = 1; // default to Executions tab to preserve current test expectations
 
   constructor(
     private route: ActivatedRoute, 
@@ -94,11 +98,26 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
         this.statusInfo = statusInfo;
         this.connectionType = this.statusChannelService.getConnectionType(this.workflowId!);
         
-        // Update workflow status if it changed
-        if (this.workflow && this.workflow.status !== statusInfo.status) {
+        // Ensure the workflow object reflects latest status details
+        if (this.workflow) {
+          // Always sync core status fields
           this.workflow.status = statusInfo.status;
           this.workflow.isTerminal = statusInfo.isTerminal;
           this.workflow.heartbeat_stale = statusInfo.heartbeat_stale;
+
+          // Propagate error and timestamps if provided by the status stream
+          if (typeof (statusInfo as any).error !== 'undefined') {
+            (this.workflow as any).error = (statusInfo as any).error;
+          }
+          if (typeof (statusInfo as any).started_at !== 'undefined') {
+            (this.workflow as any).started_at = (statusInfo as any).started_at as any;
+          }
+          if (typeof (statusInfo as any).finished_at !== 'undefined') {
+            (this.workflow as any).finished_at = (statusInfo as any).finished_at as any;
+          }
+          if (typeof (statusInfo as any).last_heartbeat_at !== 'undefined') {
+            (this.workflow as any).last_heartbeat_at = (statusInfo as any).last_heartbeat_at as any;
+          }
         }
 
         // Show warning for stale heartbeat
