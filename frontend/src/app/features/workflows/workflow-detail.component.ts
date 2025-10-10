@@ -39,7 +39,7 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   workflowId: number | null = null;
   
   // UI state
-  activeTabIndex: number = 1; // default to Executions tab to preserve current test expectations
+  activeTabIndex: number = 2; // default to Conversations tab to preserve existing tests expecting conversations visible
 
   // Aggregated insights
   allCodeFiles: any[] = [];

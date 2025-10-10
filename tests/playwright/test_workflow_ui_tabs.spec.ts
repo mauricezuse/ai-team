@@ -8,15 +8,11 @@ test.describe('Workflow UI Tabs', () => {
   });
 
   test('should show Overview, Executions, Conversations, LLM Calls, Escalations, Code Diffs, PR & Checks, Artifacts tabs', async ({ page }) => {
-    // Verify tabs exist
-    await expect(page.locator('[data-testid="tab-overview"]')).toBeVisible();
-    await expect(page.locator('[data-testid="tab-executions"]')).toBeVisible();
-    await expect(page.locator('[data-testid="tab-conversations"]')).toBeVisible();
-    await expect(page.locator('[data-testid="tab-llm-calls"]')).toBeVisible();
-    await expect(page.locator('[data-testid="tab-escalations"]')).toBeVisible();
-    await expect(page.locator('[data-testid="tab-code-diffs"]')).toBeVisible();
-    await expect(page.locator('[data-testid="tab-pr-checks"]')).toBeVisible();
-    await expect(page.locator('[data-testid="tab-artifacts"]')).toBeVisible();
+    // Verify tab headers are present (headers are always present even if content hidden)
+    const tabs = ['Overview','Executions','Conversations','LLM Calls','Escalations','Code Diffs','PR & Checks','Artifacts'];
+    for (const label of tabs) {
+      await expect(page.getByRole('tab', { name: label })).toBeVisible();
+    }
   });
 
   test('should navigate to Executions and perform comparison UI flow', async ({ page }) => {
