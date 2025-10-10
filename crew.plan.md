@@ -165,33 +165,33 @@ Notes:
 
 ## To-dos
 
-- [ ] Create branch `MINIONS-3-workflow-ui`
-- [ ] Introduce tabbed layout in workflow detail with header and KPIs
-- [ ] Add Overview tab (Jira summary, AC mapping, plan summary)
-- [ ] Implement Conversations tab with filters and virtualization
-- [ ] Implement Code Diffs tab with lazy-loaded diff viewer
-- [ ] Implement PR & Checks tab (PR URL, required checks statuses)
-- [ ] Implement LLM Calls tab with pagination, filters, charts
-- [ ] Implement Executions tab with history and comparison
-- [ ] Implement Escalations tab (read-only first)
-- [ ] Implement Artifacts tab (test reports, logs, traces)
-- [ ] Extend service(s) to fetch PR checks, diffs meta, artifacts
-- [ ] Add Playwright E2E covering all tabs and interactions
-- [ ] Migrate advanced route tests to new tabs and remove links
-- [ ] Remove `:id/advanced` route and `workflows-advanced` directory
+- [x] Create branch `MINIONS-3-workflow-ui`
+- [x] Introduce tabbed layout in workflow detail with header and KPIs
+- [x] Add Overview tab (Jira summary, AC mapping, plan summary)
+- [x] Implement Conversations tab with filters and virtualization
+- [x] Implement Code Diffs tab with lazy-loaded diff viewer
+- [x] Implement PR & Checks tab (PR URL, required checks statuses)
+- [x] Implement LLM Calls tab with pagination, filters, charts
+- [x] Implement Executions tab with history and comparison
+- [x] Implement Escalations tab (read-only first)
+- [x] Implement Artifacts tab (test reports, logs, traces)
+- [x] Extend service(s) to fetch PR checks, diffs meta, artifacts
+- [x] Add Playwright E2E covering all tabs and interactions
+- [x] Migrate advanced route tests to new tabs and remove links
+- [x] Remove `:id/advanced` route and `workflows-advanced` directory
 
 ### To-dos
 
-- [ ] Define env vars and PAT scopes; add .env placeholders and secret management docs
-- [ ] Implement Jira and GitHub services with PAT auth, retries, and error handling
-- [ ] Define CrewAI agents, prompts, and orchestrator workflow with persistence
-- [ ] Add FastAPI endpoints for workflow start/detail/resume and health
-- [ ] Implement Angular UI for workflows, conversations, diffs, PR status, escalations
-- [ ] Add OpenTelemetry tracing, structured logs, metrics, and redaction
-- [ ] Add/extend pytest and Playwright coverage, fixtures, and deterministic data
-- [ ] Author GitHub Actions templates for lint/type/tests/e2e and doc required checks
-- [ ] Create all documentation files with practical runbooks and ADRs
-- [ ] Stage rollout across repos with branch protection and SLOs
+- [x] Define env vars and PAT scopes; add .env placeholders and secret management docs
+- [x] Implement Jira and GitHub services with PAT auth, retries, and error handling
+- [x] Define CrewAI agents, prompts, and orchestrator workflow with persistence
+- [x] Add FastAPI endpoints for workflow start/detail/resume and health
+- [x] Implement Angular UI for workflows, conversations, diffs, PR status, escalations
+- [x] Add OpenTelemetry tracing, structured logs, metrics, and redaction
+- [x] Add/extend pytest and Playwright coverage, fixtures, and deterministic data
+- [x] Author GitHub Actions templates for lint/type/tests/e2e and doc required checks
+- [x] Create all documentation files with practical runbooks and ADRs
+- [x] Stage rollout across repos with branch protection and SLOs
 - [ ] Add DB models/tables: PR, CheckRun, Artifact, Diff
 - [ ] Add endpoints: GET /workflows/{id}/pr, /pr/checks, /diffs, /artifacts (and optional re-run)
 - [ ] Implement background jobs for PR checks fetch, diff computation, artifact ingestion
