@@ -42,6 +42,20 @@ def attach_handlers_to_all_ai_team_loggers():
 
 attach_handlers_to_all_ai_team_loggers()
 
+# Configure uvicorn logging to use our file handler
+def configure_uvicorn_logging():
+    """Configure uvicorn to log to our file handler"""
+    uvicorn_logger = logging.getLogger("uvicorn")
+    uvicorn_logger.addHandler(file_handler)
+    uvicorn_logger.propagate = True
+    
+    # Also configure uvicorn.access for request logs
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.addHandler(file_handler)
+    access_logger.propagate = True
+
+configure_uvicorn_logging()
+
 # Test log lines for agent loggers
 logging.getLogger('ai_team.developer').info('[LoggerTest] DeveloperAgent logger is active.')
 logging.getLogger('ai_team.frontend').info('[LoggerTest] FrontendAgent logger is active.')

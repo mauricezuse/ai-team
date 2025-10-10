@@ -2,6 +2,7 @@
 Background Workflow Executor Service
 Handles non-blocking workflow execution with proper status tracking
 """
+import asyncio
 import threading
 import time
 from typing import Dict, Any, Optional
@@ -14,6 +15,7 @@ from crewai_app.utils.logger import logger
 from crewai_app.services.event_stream import post_event
 from crewai_app.database import SessionLocal
 import threading as _threading
+import concurrent.futures
 
 class WorkflowExecutor:
     """Manages background workflow execution"""
@@ -21,8 +23,9 @@ class WorkflowExecutor:
     def __init__(self):
         self.running_workflows: Dict[int, Dict[str, Any]] = {}
         self._lock = threading.Lock()
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
     
-    def execute_workflow_async(self, workflow_id: int, execution_id: Optional[int] = None) -> Dict[str, Any]:
+    def execute_workflow_async(self, workflow_id: int, execution_id: Optional[int] = None, resume: bool = False) -> Dict[str, Any]:
         """Start workflow execution in background and return immediately"""
         
         # Check if workflow is already running
@@ -34,18 +37,13 @@ class WorkflowExecutor:
                     "status": "running"
                 }
         
-        # Start background thread
-        thread = threading.Thread(
-            target=self._execute_workflow_background,
-            args=(workflow_id, execution_id),
-            daemon=True
-        )
-        thread.start()
+        # Start background execution using thread pool
+        future = self.executor.submit(self._execute_workflow_background, workflow_id, execution_id, resume)
         
         # Mark as running
         with self._lock:
             self.running_workflows[workflow_id] = {
-                "thread": thread,
+                "future": future,
                 "start_time": datetime.utcnow(),
                 "status": "running"
             }
@@ -58,7 +56,7 @@ class WorkflowExecutor:
             "status": "running"
         }
     
-    def _execute_workflow_background(self, workflow_id: int, execution_id: Optional[int] = None):
+    def _execute_workflow_background(self, workflow_id: int, execution_id: Optional[int] = None, resume: bool = False):
         """Execute workflow in background thread"""
         try:
             logger.info(f"[WorkflowExecutor] Starting background execution for workflow {workflow_id}")

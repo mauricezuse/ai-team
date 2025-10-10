@@ -25,6 +25,8 @@
     <p>
       <button pButton type="button" label="Start New Execution" icon="pi pi-play" class="p-button-info" (click)="startNewExecution()" data-testid="start-execution"></button>
       &nbsp;
+      <button pButton type="button" label="Resume Workflow" icon="pi pi-refresh" class="p-button-success" (click)="resumeWorkflow()" data-testid="resume-workflow" *ngIf="wf.status === 'failed' || wf.status === 'completed'"></button>
+      &nbsp;
       <button pButton type="button" label="Reconcile Status" icon="pi pi-refresh" class="p-button-warning" (click)="reconcileStatus()" data-testid="reconcile-status" *ngIf="wf.status === 'running'"></button>
       &nbsp;
       <button pButton type="button" [label]="showLiveStream ? 'Hide Live Stream' : 'Show Live Stream'" icon="pi pi-bolt" class="p-button-secondary" (click)="showLiveStream = !showLiveStream"></button>

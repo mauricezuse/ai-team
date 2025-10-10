@@ -485,6 +485,32 @@ def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
     
     return {**result, "execution_id": ex.id}
 
+@app.post("/workflows/{workflow_id:int}/resume")
+def resume_workflow(workflow_id: int, db: Session = Depends(get_db)):
+    """Resume a failed or interrupted workflow from the last checkpoint"""
+    workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    # Only allow resuming failed or completed workflows
+    if workflow.status == "running":
+        raise HTTPException(status_code=400, detail="Workflow is already running")
+    
+    if workflow.status not in ["failed", "completed"]:
+        raise HTTPException(status_code=400, detail="Workflow must be failed or completed to resume")
+    
+    # Create new execution for resume
+    ex = Execution(workflow_id=workflow_id, status="running", started_at=datetime.utcnow())
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
+    
+    # Start background execution with resume flag
+    from crewai_app.services.workflow_executor import workflow_executor
+    result = workflow_executor.execute_workflow_async(workflow_id, execution_id=ex.id, resume=True)
+    
+    return {**result, "execution_id": ex.id, "resumed": True}
+
 ######## Removed legacy POST /workflows/{workflow_id}/execute (string id) endpoint
 
 @app.get("/workflows/{workflow_id}/status")

@@ -409,6 +409,18 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     });
   }
 
+  resumeWorkflow() {
+    if (!this.workflow) return;
+    this.messageService.add({ severity: 'info', summary: 'Resuming', detail: 'Resuming workflow from last checkpoint...' });
+    this.workflowService.resumeWorkflow(this.workflow.id).subscribe({
+      next: (result) => {
+        this.messageService.add({ severity: 'success', summary: 'Workflow resumed', detail: `Resumed with execution #${result.execution_id}` });
+        this.refreshWorkflow();
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to resume workflow' })
+    });
+  }
+
   refreshWorkflow() {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {

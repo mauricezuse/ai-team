@@ -44,4 +44,8 @@ export class WorkflowService {
   createWorkflowFromJira(storyId: string): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/from-jira/${storyId}`, {});
   }
+
+  resumeWorkflow(id: number): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/${id}/resume`, {});
+  }
 }

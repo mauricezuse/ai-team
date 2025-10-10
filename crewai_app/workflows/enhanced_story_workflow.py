@@ -48,6 +48,8 @@ class EnhancedStoryWorkflow:
         self.workflow_log = []
         self.collaboration_queue = []  # Track pending collaborations
         self.escalation_queue = []     # Track pending escalations
+        self.conversation_history = []  # Track conversation patterns for loop detection
+        self.max_iterations = 10  # Maximum iterations per step to prevent infinite loops
         self.current_conversation_id = None  # Track current conversation for LLM calls
         
         # Initialize agents with proper OpenAIService instances
@@ -102,6 +104,39 @@ class EnhancedStoryWorkflow:
         else:
             print(f"Backend repo already present at {submodule_path}")
         return submodule_path
+
+    def _detect_conversation_loop(self, agent_name: str, message: str) -> bool:
+        """Detect if we're in a conversation loop"""
+        # Add current message to history
+        self.conversation_history.append({
+            "agent": agent_name,
+            "message": message[:100],  # First 100 chars for pattern matching
+            "timestamp": datetime.utcnow()
+        })
+        
+        # Keep only last 20 messages for analysis
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
+        
+        # Check for repeated patterns in last 10 messages
+        if len(self.conversation_history) >= 10:
+            recent_messages = [h["message"] for h in self.conversation_history[-10:]]
+            # Check if same message appears 3+ times
+            message_counts = {}
+            for msg in recent_messages:
+                message_counts[msg] = message_counts.get(msg, 0) + 1
+                if message_counts[msg] >= 3:
+                    logger.warning(f"[EnhancedWorkflow] Loop detected: '{msg}' repeated {message_counts[msg]} times")
+                    return True
+        
+        return False
+    
+    def _should_escalate_loop(self, agent_name: str, iteration_count: int) -> bool:
+        """Check if we should escalate due to loop or max iterations"""
+        if iteration_count >= self.max_iterations:
+            logger.warning(f"[EnhancedWorkflow] Max iterations ({self.max_iterations}) reached for {agent_name}")
+            return True
+        return False
 
     def load_global_rules(self):
         """Load global coding rules from YAML file."""
