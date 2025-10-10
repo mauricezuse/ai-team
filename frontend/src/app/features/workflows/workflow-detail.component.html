@@ -57,7 +57,7 @@
         <div *ngIf="allCodeFiles.length > 0" class="code-files-summary">
           <h4>Code Files Changed/Generated</h4>
           <ul>
-            <li *ngFor="let file of allCodeFiles">{{ getFileDisplayName(file) }} <small>({{ getFilePath(file) }})</small></li>
+            <li *ngFor="let file of allCodeFiles">{{ getFileDisplayName(file) }}</li>
           </ul>
         </div>
       </div>
