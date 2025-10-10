@@ -35,9 +35,7 @@ export class WorkflowService {
     return this.http.get<WorkflowResponse>(`${this.apiUrl}/${id}`, { headers });
   }
 
-  executeWorkflow(id: string, storyId?: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/${id}/execute`, { story_id: storyId });
-  }
+  // Removed legacy executeWorkflow; use advancedService.startExecution for new runs
 
   createWorkflow(workflowData: any): Observable<any> {
     return this.http.post<any>(this.apiUrl, workflowData);

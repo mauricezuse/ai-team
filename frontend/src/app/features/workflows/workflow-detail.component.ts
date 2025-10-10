@@ -395,37 +395,7 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     conversation.expanded = !conversation.expanded;
   }
 
-  executeWorkflow() {
-    if (!this.workflow) return;
-
-    this.workflow.status = 'running';
-    this.messageService.add({
-      severity: 'info',
-      summary: 'Executing',
-      detail: 'Workflow execution started...'
-    });
-
-    this.workflowService.executeWorkflow(String(this.workflow.id)).subscribe({
-      next: (result) => {
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Workflow executed successfully'
-        });
-        this.refreshWorkflow();
-      },
-      error: (error) => {
-        if (this.workflow) {
-          this.workflow.status = 'error';
-        }
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Error executing workflow'
-        });
-      }
-    });
-  }
+  // Removed legacy executeWorkflow() in favor of startNewExecution()
 
   startNewExecution() {
     if (!this.workflow) return;
