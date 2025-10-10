@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Body, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Body, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -21,6 +21,7 @@ from crewai_app.database import get_db, init_database, Workflow, Conversation, C
 from crewai_app.database import LLMCall
 from crewai_app.database import Execution
 from crewai_app.database import PullRequest, CheckRun, Artifact, Diff
+from crewai_app.services.background_jobs import refresh_pr_and_checks, refresh_diffs, refresh_artifacts
 from crewai_app.utils.feature_flags import FeatureFlags
 from crewai_app.services.workflow_status_service import workflow_status_service
 
@@ -948,6 +949,22 @@ def list_artifacts(workflow_id: int, db: Session = Depends(get_db), page: int = 
         q = q.filter(Artifact.kind == kind)
     items = q.order_by(Artifact.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
     return items
+
+# --- Refresh Job Enqueue Endpoints ---
+@app.post("/workflows/{workflow_id:int}/pr/refresh")
+def refresh_pr_checks_endpoint(workflow_id: int, tasks: BackgroundTasks):
+    tasks.add_task(refresh_pr_and_checks, workflow_id)
+    return {"message": "PR and checks refresh enqueued"}
+
+@app.post("/workflows/{workflow_id:int}/diffs/refresh")
+def refresh_diffs_endpoint(workflow_id: int, tasks: BackgroundTasks):
+    tasks.add_task(refresh_diffs, workflow_id)
+    return {"message": "Diffs refresh enqueued"}
+
+@app.post("/workflows/{workflow_id:int}/artifacts/refresh")
+def refresh_artifacts_endpoint(workflow_id: int, tasks: BackgroundTasks):
+    tasks.add_task(refresh_artifacts, workflow_id)
+    return {"message": "Artifacts refresh enqueued"}
 
 # --- Models for API ---
 class PlanningInput(BaseModel):
