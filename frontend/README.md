@@ -93,7 +93,7 @@ frontend/
 - `getWorkflows()` - Fetch all workflows
 - `getWorkflow(id)` - Get specific workflow
 - `createWorkflow(data)` - Create new workflow
-- `executeWorkflow(id)` - Execute workflow
+- `startExecution(workflowId)` - Start a new execution (replaces legacy executeWorkflow)
 - `deleteWorkflow(id)` - Delete workflow
 
 ### WorkflowAdvancedService

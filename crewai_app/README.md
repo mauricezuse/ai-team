@@ -52,7 +52,7 @@ crewai_app/
 - `POST /workflows` - Create new workflow
   - Idempotent: returns 200 and existing workflow if `jira_story_id` already exists
 - `DELETE /workflows/{id}` - Delete workflow
-- `POST /workflows/{id}/execute` - Execute workflow with AI agents
+- `POST /workflows/{id}/execute` - Execute workflow with AI agents (int-only)
 - `POST /workflows/from-jira/{story_id}` - Create workflow from Jira story
     - On success: `{ "message": "Workflow created successfully for {story_id}", "workflow_id": <id> }`
     - On duplicate: same success message with existing `workflow_id`
@@ -64,6 +64,8 @@ crewai_app/
 - `GET /workflows/{id}/executions/{execution_id}` - Get specific execution details
 - `POST /workflows/{id}/executions/start` - Start a new execution for a workflow
 - `GET /workflows/{id}/executions/{exec_a}/compare/{exec_b}` - Compare two executions
+
+Note: Legacy string-id endpoints have been removed. Only integer workflow IDs are supported.
 
 ### Workflow Execution
 - **Enhanced Conversations**: Each conversation includes detailed prompts and agent instructions
@@ -157,6 +159,10 @@ AZURE_OPENAI_DEPLOYMENT=your-deployment
 
 # Feature Flags
 AI_TEAM_REDACT_SENSITIVE=1
+
+# Heartbeat
+HEARTBEAT_INTERVAL_SECONDS=15
+HEARTBEAT_TIMEOUT_SECONDS=120
 ```
 
 ## Development
