@@ -431,45 +431,7 @@ def get_workflow_db(workflow_id: int, db: Session = Depends(get_db), if_none_mat
     
     return workflow_data
 
-@app.get("/workflows/{workflow_id}")
-def get_workflow_file(workflow_id: str):
-    """Legacy file-based workflow detail used in tests."""
-    try:
-        results_dir = "workflow_results"
-        if not os.path.exists(results_dir):
-            raise HTTPException(status_code=404, detail="Workflow not found")
-        path = os.path.join(results_dir, f"{workflow_id}_checkpoint.json")
-        if not os.path.exists(path):
-            raise HTTPException(status_code=404, detail="Workflow not found")
-        with open(path, "r") as f:
-            data = json.load(f)
-        # Build minimal response structure expected by tests
-        workflow_data = {
-            "id": workflow_id,
-            "name": (workflow_id.replace("_", " ").title() if workflow_id else "Workflow"),
-            "status": "completed",
-            "conversations": [],
-        }
-        log = data.get("workflow_log", [])
-        for entry in log:
-            workflow_data["conversations"].append({
-                "step": entry.get("step", ""),
-                "agent": entry.get("agent", ""),
-                "timestamp": entry.get("timestamp", ""),
-                "status": entry.get("status", ""),
-                "details": entry.get("details", ""),
-                "output": entry.get("output", ""),
-                "code_files": entry.get("code_files", []),
-                "escalations": entry.get("escalations", []),
-                "collaborations": entry.get("collaborations", []),
-            })
-        return workflow_data
-    except IOError:
-        raise HTTPException(status_code=500, detail="Error reading workflow file")
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise
-        raise HTTPException(status_code=500, detail=f"Error reading workflow: {e}")
+######## Removed legacy GET /workflows/{workflow_id} (string id) endpoint
 
 @app.post("/workflows", response_model=WorkflowResponse)
 def create_workflow(workflow_data: WorkflowCreate, db: Session = Depends(get_db)):
@@ -523,24 +485,7 @@ def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
     
     return {**result, "execution_id": ex.id}
 
-@app.post("/workflows/{workflow_id}/execute")
-def execute_workflow_file(workflow_id: str, story_id: Optional[str] = Query(None)):
-    """Legacy execute endpoint for string workflow ids used in tests."""
-    try:
-        sid = story_id or (workflow_id.split("_")[-1] if workflow_id else None)
-        wf = EnhancedStoryWorkflow(story_id=sid, use_real_jira=True, use_real_github=True, codebase_root=None, user_intervention_mode=False)
-        results = wf.run()
-        return {
-            "message": "Workflow executed successfully",
-            "workflow_id": workflow_id,
-            "story_id": sid,
-            "status": "completed",
-            "results": results,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error executing workflow")
+######## Removed legacy POST /workflows/{workflow_id}/execute (string id) endpoint
 
 @app.get("/workflows/{workflow_id}/status")
 def get_workflow_status(workflow_id: int):
