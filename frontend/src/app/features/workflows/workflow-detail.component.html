@@ -177,7 +177,7 @@
                 <p-accordion>
                   <p-accordionTab *ngFor="let file of conversation.code_files; let i = index" 
                                   [header]="getFileDisplayName(file)" 
-                                  [selected]="false">
+                                  [selected]="true">
                     <div class="code-file-content">
                       <div class="code-file-header">
                         <span class="file-name">
