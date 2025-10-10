@@ -54,6 +54,10 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   execA: number | null = null;
   execB: number | null = null;
   execCompareResult: any | null = null;
+  // Live event stream
+  liveLogs: Array<{ level?: string; message?: string; timestamp?: string }> = [];
+  liveConversations: any[] = [];
+  private streamCloser: { close: () => void } | null = null;
 
   constructor(
     private route: ActivatedRoute, 
@@ -69,6 +73,7 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
       this.workflowId = parseInt(id);
       this.loadWorkflow(id);
       this.startStatusTracking();
+      this.startEventStream();
     }
   }
 
@@ -117,6 +122,10 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     }
     if (this.workflowId) {
       this.statusChannelService.stopConnection(this.workflowId);
+    }
+    if (this.streamCloser) {
+      this.streamCloser.close();
+      this.streamCloser = null;
     }
   }
 
@@ -412,6 +421,22 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     if (id) {
       this.loadWorkflow(id);
     }
+  }
+
+  private startEventStream() {
+    if (!this.workflowId) return;
+    this.streamCloser = this.statusChannelService.connectEventStream(this.workflowId, (evt) => {
+      if (!evt || !evt.type) return;
+      if (evt.type === 'log') {
+        this.liveLogs.unshift({ level: evt.level || 'info', message: evt.message || '', timestamp: evt.timestamp });
+        this.liveLogs = this.liveLogs.slice(0, 200);
+      } else if (evt.type === 'conversation' && evt.conversation) {
+        this.liveConversations.unshift(evt.conversation);
+        this.filteredConversations = [evt.conversation, ...(this.filteredConversations || [])];
+      } else if (evt.type === 'status' && this.workflow) {
+        this.workflow.status = evt.status;
+      }
+    });
   }
 
   getFileUrl(file: any): string {

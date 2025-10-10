@@ -16,6 +16,7 @@ export class WorkflowStatusChannelService {
   private apiUrl = '/api';
   private wsUrl = 'ws://localhost:8000/ws';
   private sseUrl = '/api/events';
+  private streamUrl = '/api/events';
   
   private statusSubjects: Map<number, BehaviorSubject<WorkflowStatusInfo>> = new Map();
   private connectionTypes: Map<number, ConnectionType> = new Map();
@@ -185,6 +186,25 @@ export class WorkflowStatusChannelService {
       console.error(`[WorkflowStatusChannel] SSE connection failed:`, error);
       this.handleConnectionError(workflowId, config);
     }
+  }
+
+  /**
+   * Connect to real-time event stream (logs + conversation events)
+   */
+  connectEventStream(workflowId: number, onEvent: (evt: any) => void): { close: () => void } {
+    const source = new EventSource(`${this.streamUrl}/workflows/${workflowId}/stream`);
+    source.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        onEvent(data);
+      } catch (e) {
+        console.error('[WorkflowStatusChannel] stream parse error', e);
+      }
+    };
+    source.onerror = (err) => {
+      console.error('[WorkflowStatusChannel] stream error', err);
+    };
+    return { close: () => source.close() };
   }
 
   private connectPolling(workflowId: number, stopSubject: Subject<void>, config: StatusChannelConfig): void {

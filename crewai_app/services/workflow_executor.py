@@ -11,6 +11,7 @@ from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.services.jira_service import JiraService
 from crewai_app.services.workflow_status_service import workflow_status_service
 from crewai_app.utils.logger import logger
+from crewai_app.services.event_stream import post_event
 
 class WorkflowExecutor:
     """Manages background workflow execution"""
@@ -59,6 +60,7 @@ class WorkflowExecutor:
         """Execute workflow in background thread"""
         try:
             logger.info(f"[WorkflowExecutor] Starting background execution for workflow {workflow_id}")
+            post_event(workflow_id, {"type": "log", "level": "info", "message": f"Starting execution for workflow {workflow_id}"})
             
             # Get database session
             db = next(get_db())
@@ -76,6 +78,7 @@ class WorkflowExecutor:
             
             # Start heartbeat tracking
             workflow_status_service.start_workflow_heartbeat(workflow_id)
+            post_event(workflow_id, {"type": "status", "status": "running"})
             
             # Check if we should use real Jira or mock data
             use_real_jira = True
@@ -114,6 +117,21 @@ class WorkflowExecutor:
                     )
                     db.add(conversation)
                     db.flush()
+
+                    # Emit real-time conversation event
+                    post_event(workflow_id, {
+                        "type": "conversation",
+                        "conversation": {
+                            "id": conversation.id,
+                            "step": conversation.step,
+                            "agent": conversation.agent,
+                            "status": conversation.status,
+                            "details": conversation.details,
+                            "output": conversation.output,
+                            "prompt": conversation.prompt,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    })
                     
                     # Store code files if they exist
                     if 'code_files' in log_entry and log_entry['code_files']:
@@ -172,11 +190,13 @@ class WorkflowExecutor:
                 "completed", 
                 datetime.utcnow()
             )
+            post_event(workflow_id, {"type": "status", "status": "completed"})
             
             logger.info(f"[WorkflowExecutor] Completed background execution for workflow {workflow_id}")
             
         except Exception as e:
             logger.error(f"[WorkflowExecutor] Background execution failed for workflow {workflow_id}: {e}")
+            post_event(workflow_id, {"type": "log", "level": "error", "message": f"Execution failed: {e}"})
             
             # Finalize workflow status as failed
             try:
@@ -186,6 +206,7 @@ class WorkflowExecutor:
                     datetime.utcnow(),
                     str(e)
                 )
+            post_event(workflow_id, {"type": "status", "status": "failed"})
                 
                 # Update execution status if present
                 if execution_id:

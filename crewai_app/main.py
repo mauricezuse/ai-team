@@ -22,6 +22,7 @@ from crewai_app.database import LLMCall
 from crewai_app.database import Execution
 from crewai_app.database import PullRequest, CheckRun, Artifact, Diff
 from crewai_app.services.background_jobs import refresh_pr_and_checks, refresh_diffs, refresh_artifacts
+from crewai_app.services.event_stream import try_get_event
 from crewai_app.utils.feature_flags import FeatureFlags
 from crewai_app.services.workflow_status_service import workflow_status_service
 import hmac
@@ -625,6 +626,29 @@ async def sse_endpoint(workflow_id: int):
                 
             await asyncio.sleep(5)  # Check every 5 seconds
     
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control"
+        }
+    )
+
+# New event stream endpoint for logs and real-time conversation events
+@app.get("/events/workflows/{workflow_id}/stream")
+async def sse_event_stream(workflow_id: int):
+    async def event_generator():
+        while True:
+            # Try to fetch an event from the queue
+            evt = try_get_event(workflow_id, timeout_seconds=0.1)
+            if evt is not None:
+                yield f"data: {json.dumps(evt)}\n\n"
+            else:
+                # Keep-alive ping every few seconds
+                await asyncio.sleep(0.9)
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
