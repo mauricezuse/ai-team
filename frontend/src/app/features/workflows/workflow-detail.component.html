@@ -121,7 +121,7 @@
     </p-tabPanel>
 
     <p-tabPanel header="Conversations" data-testid="tab-conversations">
-      <div *ngIf="wf && wf.conversations && wf.conversations.length > 0" class="conversations-section" data-testid="conversations">
+      <div *ngIf="activeTabIndex === 2 && wf && wf.conversations && wf.conversations.length > 0" class="conversations-section" data-testid="conversations">
         <h3>Agent Conversations</h3>
         <div class="conversation-filters">
           <input type="text" pInputText placeholder="Search conversations..." 
@@ -276,7 +276,7 @@
           </div>
         </div>
       </div>
-      <div *ngIf="!wf.conversations || wf.conversations.length === 0" class="no-conversations">
+      <div *ngIf="activeTabIndex === 2 && (!wf.conversations || wf.conversations.length === 0)" class="no-conversations">
         <p>No conversations yet</p>
       </div>
     </p-tabPanel>
@@ -334,7 +334,7 @@
     </p-tabPanel>
 
     <p-tabPanel header="Code Diffs" data-testid="tab-code-diffs">
-      <div *ngIf="allCodeFiles.length > 0">
+      <div *ngIf="activeTabIndex === 5 && allCodeFiles.length > 0">
         <p-accordion>
           <p-accordionTab *ngFor="let file of allCodeFiles" [header]="getFileDisplayName(file)">
             <div class="code-file-content">
@@ -354,7 +354,7 @@
           </p-accordionTab>
         </p-accordion>
       </div>
-      <div *ngIf="allCodeFiles.length === 0">
+      <div *ngIf="activeTabIndex === 5 && allCodeFiles.length === 0">
         <p>No code changes detected yet</p>
       </div>
     </p-tabPanel>
