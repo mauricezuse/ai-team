@@ -35,6 +35,9 @@ class Workflow(Base):
     conversations = relationship("Conversation", back_populates="workflow", cascade="all, delete-orphan")
     code_files = relationship("CodeFile", back_populates="workflow", cascade="all, delete-orphan")
     executions = relationship("Execution", back_populates="workflow", cascade="all, delete-orphan")
+    pull_requests = relationship("PullRequest", back_populates="workflow", cascade="all, delete-orphan")
+    artifacts = relationship("Artifact", back_populates="workflow", cascade="all, delete-orphan")
+    diffs = relationship("Diff", back_populates="workflow", cascade="all, delete-orphan")
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -138,6 +141,72 @@ class Execution(Base):
     
     # Relationships
     workflow = relationship("Workflow", back_populates="executions")
+
+class PullRequest(Base):
+    __tablename__ = "pull_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id"), index=True)
+    pr_number = Column(Integer, index=True)
+    url = Column(String)
+    title = Column(String)
+    state = Column(String)  # open|closed|merged
+    head_branch = Column(String)
+    base_branch = Column(String)
+    head_sha = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    closed_at = Column(DateTime)
+    merged_at = Column(DateTime)
+
+    # Relationships
+    workflow = relationship("Workflow", back_populates="pull_requests")
+    check_runs = relationship("CheckRun", back_populates="pull_request", cascade="all, delete-orphan")
+
+class CheckRun(Base):
+    __tablename__ = "check_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id"), index=True)
+    pr_id = Column(Integer, ForeignKey("pull_requests.id"), index=True)
+    name = Column(String)
+    status = Column(String)  # queued|in_progress|completed
+    conclusion = Column(String)  # success|failure|neutral|cancelled|timed_out|action_required|skipped
+    external_id = Column(String)
+    html_url = Column(String)
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+
+    # Relationships
+    pull_request = relationship("PullRequest", back_populates="check_runs")
+
+class Artifact(Base):
+    __tablename__ = "artifacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id"), index=True)
+    execution_id = Column(Integer, ForeignKey("executions.id"), nullable=True)
+    kind = Column(String)  # test-report|trace|lint|coverage|other
+    uri = Column(String)
+    checksum = Column(String)
+    size_bytes = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    workflow = relationship("Workflow", back_populates="artifacts")
+
+class Diff(Base):
+    __tablename__ = "diffs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id"), index=True)
+    path = Column(String)
+    patch = Column(Text)  # unified diff
+    head_sha = Column(String)
+    base_sha = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    workflow = relationship("Workflow", back_populates="diffs")
 
 # Database functions
 def get_db():

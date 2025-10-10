@@ -20,6 +20,7 @@ from crewai_app.config import settings
 from crewai_app.database import get_db, init_database, Workflow, Conversation, CodeFile, Escalation, Collaboration
 from crewai_app.database import LLMCall
 from crewai_app.database import Execution
+from crewai_app.database import PullRequest, CheckRun, Artifact, Diff
 from crewai_app.utils.feature_flags import FeatureFlags
 from crewai_app.services.workflow_status_service import workflow_status_service
 
@@ -649,6 +650,49 @@ class ExecutionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class PullRequestResponse(BaseModel):
+    pr_number: Optional[int] = None
+    url: Optional[str] = None
+    title: Optional[str] = None
+    state: Optional[str] = None
+    head_branch: Optional[str] = None
+    base_branch: Optional[str] = None
+    head_sha: Optional[str] = None
+    created_at: Optional[datetime] = None
+    merged_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class CheckRunResponse(BaseModel):
+    id: int
+    name: Optional[str] = None
+    status: Optional[str] = None
+    conclusion: Optional[str] = None
+    html_url: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class DiffResponse(BaseModel):
+    path: str
+    patch: str
+    head_sha: Optional[str] = None
+    base_sha: Optional[str] = None
+
+class ArtifactResponse(BaseModel):
+    id: int
+    kind: str
+    uri: str
+    checksum: Optional[str] = None
+    size_bytes: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 @app.get("/workflows/{workflow_id:int}/executions", response_model=List[ExecutionResponse])
 def list_executions(workflow_id: int, db: Session = Depends(get_db)):
     wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
@@ -838,9 +882,72 @@ def list_endpoints():
             {"path": "/workflows/{workflow_id}/execute", "method": "POST", "description": "Execute a workflow."},
             {"path": "/agents", "method": "GET", "description": "List all agents."},
             {"path": "/agents/{agent_id}", "method": "GET", "description": "Get agent details."},
-            {"path": "/health", "method": "GET", "description": "Health check."}
+            {"path": "/health", "method": "GET", "description": "Health check."},
+            {"path": "/workflows/{workflow_id}/pr", "method": "GET", "description": "Get PR summary for workflow."},
+            {"path": "/workflows/{workflow_id}/pr/checks", "method": "GET", "description": "List PR checks for workflow."},
+            {"path": "/workflows/{workflow_id}/diffs", "method": "GET", "description": "List diffs for workflow."},
+            {"path": "/workflows/{workflow_id}/artifacts", "method": "GET", "description": "List artifacts for workflow."}
         ]
     }
+
+# --- PR & Checks API ---
+@app.get("/workflows/{workflow_id:int}/pr", response_model=PullRequestResponse)
+def get_workflow_pr(workflow_id: int, db: Session = Depends(get_db)):
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    pr = db.query(PullRequest).filter(PullRequest.workflow_id == workflow_id).order_by(PullRequest.created_at.desc()).first()
+    if pr:
+        return PullRequestResponse(
+            pr_number=pr.pr_number,
+            url=pr.url,
+            title=pr.title,
+            state=pr.state,
+            head_branch=pr.head_branch,
+            base_branch=pr.base_branch,
+            head_sha=pr.head_sha,
+            created_at=pr.created_at,
+            merged_at=pr.merged_at,
+        )
+    # Fallback from conversation step if available
+    conv = db.query(Conversation).filter(Conversation.workflow_id == workflow_id, Conversation.step == 'pr_created').order_by(Conversation.timestamp.desc()).first()
+    if conv:
+        url = None
+        try:
+            if isinstance(conv.output, str) and conv.output.startswith('{'):
+                obj = json.loads(conv.output)
+                url = obj.get('pr', {}).get('url') or obj.get('url')
+        except Exception:
+            pass
+        return PullRequestResponse(url=url)
+    raise HTTPException(status_code=404, detail="PR not found")
+
+@app.get("/workflows/{workflow_id:int}/pr/checks", response_model=List[CheckRunResponse])
+def list_pr_checks(workflow_id: int, db: Session = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200)):
+    pr = db.query(PullRequest).filter(PullRequest.workflow_id == workflow_id).order_by(PullRequest.created_at.desc()).first()
+    if not pr:
+        return []
+    q = db.query(CheckRun).filter(CheckRun.workflow_id == workflow_id, CheckRun.pr_id == pr.id)
+    items = q.order_by(CheckRun.started_at.desc().nullslast()).offset((page - 1) * page_size).limit(page_size).all()
+    return items
+
+# --- Diffs API ---
+@app.get("/workflows/{workflow_id:int}/diffs", response_model=List[DiffResponse])
+def list_diffs(workflow_id: int, db: Session = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200), path: Optional[str] = Query(None)):
+    q = db.query(Diff).filter(Diff.workflow_id == workflow_id)
+    if path:
+        q = q.filter(Diff.path.like(f"%{path}%"))
+    items = q.order_by(Diff.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return [DiffResponse(path=i.path, patch=i.patch or "", head_sha=i.head_sha, base_sha=i.base_sha) for i in items]
+
+# --- Artifacts API ---
+@app.get("/workflows/{workflow_id:int}/artifacts", response_model=List[ArtifactResponse])
+def list_artifacts(workflow_id: int, db: Session = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200), kind: Optional[str] = Query(None)):
+    q = db.query(Artifact).filter(Artifact.workflow_id == workflow_id)
+    if kind:
+        q = q.filter(Artifact.kind == kind)
+    items = q.order_by(Artifact.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return items
 
 # --- Models for API ---
 class PlanningInput(BaseModel):
