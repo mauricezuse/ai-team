@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { WorkflowService } from '../../core/services/workflow.service';
 import { WorkflowAdvancedService } from '../../core/services/workflow-advanced.service';
@@ -13,16 +13,18 @@ import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { AccordionModule } from 'primeng/accordion';
 import { TabViewModule } from 'primeng/tabview';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
 import { WorkflowResponse, WorkflowStatusInfo, ConnectionType } from '../../core/models/workflow-status.model';
 
 @Component({
   selector: 'app-workflow-detail',
   standalone: true,
-  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule, TabViewModule, RouterModule],
+  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule, TabViewModule, RouterModule, ScrollingModule],
   providers: [MessageService],
   templateUrl: './workflow-detail.component.html',
-  styleUrl: './workflow-detail.component.scss'
+  styleUrl: './workflow-detail.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WorkflowDetailComponent implements OnInit, OnDestroy {
   workflow: WorkflowResponse | null = null;
@@ -58,13 +60,23 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   liveLogs: Array<{ level?: string; message?: string; timestamp?: string }> = [];
   liveConversations: any[] = [];
   private streamCloser: { close: () => void } | null = null;
+  showLiveStream: boolean = true;
+
+  // Loading flags
+  isLoadingWorkflow: boolean = true;
+  isLoadingExecutions: boolean = true;
+  isLoadingPR: boolean = true;
+  isLoadingChecks: boolean = true;
+  isLoadingDiffs: boolean = true;
+  isLoadingArtifacts: boolean = true;
 
   constructor(
     private route: ActivatedRoute, 
     private workflowService: WorkflowService,
     private advancedService: WorkflowAdvancedService,
     private statusChannelService: WorkflowStatusChannelService,
-    private messageService: MessageService
+    private messageService: MessageService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -130,14 +142,19 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   }
 
   loadWorkflow(id: string) {
+    this.isLoadingWorkflow = true;
+    this.cdr.markForCheck();
     this.workflowService.getWorkflow(id).subscribe({
       next: (workflow) => {
         this.workflow = workflow;
+        this.isLoadingWorkflow = false;
         // Attach executions list
         this.advancedService.listExecutions(String(workflow.id)).subscribe(execs => {
           if (this.workflow) {
             (this.workflow as any).executions = execs || [];
           }
+          this.isLoadingExecutions = false;
+          this.cdr.markForCheck();
         });
         this.initializeConversations();
 
@@ -150,25 +167,28 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
             if (pr && pr.url) {
               this.prInfo = { url: pr.url };
             }
+            this.isLoadingPR = false;
+            this.cdr.markForCheck();
           },
-          error: () => {}
+          error: () => { this.isLoadingPR = false; this.cdr.markForCheck(); }
         });
         this.advancedService.listPrChecks(String(workflow.id), { page: 1, page_size: 50 }).subscribe({
-          next: (checks) => { this.prChecks = checks || []; },
-          error: () => { this.prChecks = []; }
+          next: (checks) => { this.prChecks = checks || []; this.isLoadingChecks = false; this.cdr.markForCheck(); },
+          error: () => { this.prChecks = []; this.isLoadingChecks = false; this.cdr.markForCheck(); }
         });
 
         // Fetch diffs meta
         this.advancedService.listDiffs(String(workflow.id), { page: 1, page_size: 100 }).subscribe({
-          next: (diffs) => { this.diffs = diffs || []; },
-          error: () => { this.diffs = []; }
+          next: (diffs) => { this.diffs = diffs || []; this.isLoadingDiffs = false; this.cdr.markForCheck(); },
+          error: () => { this.diffs = []; this.isLoadingDiffs = false; this.cdr.markForCheck(); }
         });
 
         // Fetch artifacts
         this.advancedService.listArtifacts(String(workflow.id), { page: 1, page_size: 50 }).subscribe({
-          next: (arts) => { this.artifacts = arts || []; },
-          error: () => { this.artifacts = []; }
+          next: (arts) => { this.artifacts = arts || []; this.isLoadingArtifacts = false; this.cdr.markForCheck(); },
+          error: () => { this.artifacts = []; this.isLoadingArtifacts = false; this.cdr.markForCheck(); }
         });
+        this.cdr.markForCheck();
       },
       error: (error) => {
         console.error('Error loading workflow:', error);
@@ -177,6 +197,8 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
           summary: 'Error',
           detail: 'Failed to load workflow'
         });
+        this.isLoadingWorkflow = false;
+        this.cdr.markForCheck();
       }
     });
   }
@@ -209,6 +231,7 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
           if (typeof (statusInfo as any).last_heartbeat_at !== 'undefined') {
             (this.workflow as any).last_heartbeat_at = (statusInfo as any).last_heartbeat_at as any;
           }
+          this.cdr.markForCheck();
         }
 
         // Show warning for stale heartbeat
@@ -430,14 +453,25 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
       if (evt.type === 'log') {
         this.liveLogs.unshift({ level: evt.level || 'info', message: evt.message || '', timestamp: evt.timestamp });
         this.liveLogs = this.liveLogs.slice(0, 200);
+        this.cdr.markForCheck();
       } else if (evt.type === 'conversation' && evt.conversation) {
         this.liveConversations.unshift(evt.conversation);
         this.filteredConversations = [evt.conversation, ...(this.filteredConversations || [])];
+        this.cdr.markForCheck();
       } else if (evt.type === 'status' && this.workflow) {
         this.workflow.status = evt.status;
+        this.cdr.markForCheck();
       }
     });
   }
+
+  // trackBy functions for performance
+  trackByConversation = (_: number, c: any) => c?.id || c?.timestamp || _;
+  trackByLog = (_: number, l: any) => l?.timestamp || _;
+  trackByArtifact = (_: number, a: any) => a?.id || _;
+  trackByDiff = (_: number, d: any) => d?.path || _;
+  trackByCheck = (_: number, c: any) => c?.id || c?.name || _;
+  trackByExec = (_: number, e: any) => e?.id || _;
 
   getFileUrl(file: any): string {
     // Handle both string and object file formats

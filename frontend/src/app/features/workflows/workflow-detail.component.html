@@ -28,26 +28,28 @@
       <button pButton type="button" label="Start New Execution" icon="pi pi-play" class="p-button-info" (click)="startNewExecution()" data-testid="start-execution"></button>
       &nbsp;
       <button pButton type="button" label="Reconcile Status" icon="pi pi-refresh" class="p-button-warning" (click)="reconcileStatus()" data-testid="reconcile-status" *ngIf="wf.status === 'running'"></button>
+      &nbsp;
+      <button pButton type="button" [label]="showLiveStream ? 'Hide Live Stream' : 'Show Live Stream'" icon="pi pi-bolt" class="p-button-secondary" (click)="showLiveStream = !showLiveStream"></button>
     </p>
   </div>
 
-  <div class="live-stream" *ngIf="liveLogs.length > 0 || liveConversations.length > 0" style="margin-top: 1rem;">
+  <div class="live-stream" *ngIf="showLiveStream" style="margin-top: 1rem;">
     <h3>Live Stream</h3>
     <div class="live-columns" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
       <div>
         <h4>Logs</h4>
-        <div class="log-list" style="max-height: 200px; overflow: auto; border: 1px solid #ddd; padding: .5rem;">
-          <div *ngFor="let log of liveLogs">
+        <cdk-virtual-scroll-viewport itemSize="22" class="log-list" style="height: 200px; border: 1px solid #ddd; padding: .5rem;">
+          <div *cdkVirtualFor="let log of liveLogs; trackBy: trackByLog">
             <small>[{{ log.timestamp | date:'shortTime' }}]</small>
             <span [ngClass]="'level-' + (log.level || 'info')">{{ log.level?.toUpperCase() }}</span>
             <span> - {{ log.message }}</span>
           </div>
-        </div>
+        </cdk-virtual-scroll-viewport>
       </div>
       <div>
         <h4>Incoming Conversations</h4>
-        <div class="conv-list" style="max-height: 200px; overflow: auto; border: 1px solid #ddd; padding: .5rem;">
-          <div *ngFor="let c of liveConversations">
+        <cdk-virtual-scroll-viewport itemSize="64" class="conv-list" style="height: 200px; border: 1px solid #ddd; padding: .5rem;">
+          <div *cdkVirtualFor="let c of liveConversations; trackBy: trackByConversation">
             <div class="conversation-item">
               <div class="conversation-header">
                 <div class="conversation-meta">
@@ -68,7 +70,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </cdk-virtual-scroll-viewport>
       </div>
     </div>
   </div>
