@@ -22,6 +22,7 @@ from crewai_app.agents.frontend import FrontendAgent, frontend_openai
 from crewai_app.utils.codebase_indexer import build_directory_tree, agent_select_relevant_files, index_selected_files_async
 from crewai_app.services.openai_service import PromptTooLargeError, OpenAIService
 from crewai_app.utils.logger import logger, attach_handlers_to_all_ai_team_loggers
+from crewai_app.services.workflow_status_service import workflow_status_service
 from crewai_app.config import settings
 
 logger.info('[EnhancedWorkflow] Logger initialized in enhanced_story_workflow.py')
@@ -439,6 +440,7 @@ class EnhancedStoryWorkflow:
         print(f'[EnhancedWorkflow] Retrieving story {self.story_id} from Jira...')
         
         story = self.jira_service.get_story(self.story_id)
+        workflow_status_service.touch_heartbeat(self.workflow_id)
         if not story:
             logger.error(f'[EnhancedWorkflow] Failed to retrieve story {self.story_id}')
             return None
@@ -452,6 +454,7 @@ class EnhancedStoryWorkflow:
             workflow_id=self.workflow_id,
             conversation_id=self.current_conversation_id
         )
+        workflow_status_service.touch_heartbeat(self.workflow_id)
         
         self.workflow_log.append({
             'step': 'story_retrieved_and_analyzed',
@@ -468,9 +471,13 @@ class EnhancedStoryWorkflow:
         
         try:
             # Include common monorepo-style layouts
+            workflow_status_service.touch_heartbeat(self.workflow_id)
             tree = build_directory_tree(self.codebase_root, allowed_dirs=['backend', 'frontend', 'backend/apps'])
+            workflow_status_service.touch_heartbeat(self.workflow_id)
             selected_files = agent_select_relevant_files(tree, self.story_id, agent=None, plugin='semantic')
+            workflow_status_service.touch_heartbeat(self.workflow_id)
             codebase_index = index_selected_files_async(self.codebase_root, selected_files)
+            workflow_status_service.touch_heartbeat(self.workflow_id)
             # Cache for later tester use
             self.latest_codebase_index = codebase_index
             

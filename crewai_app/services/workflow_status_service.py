@@ -106,6 +106,22 @@ class WorkflowStatusService:
             if workflow_id in self._heartbeat_threads:
                 del self._heartbeat_threads[workflow_id]
                 logger.info(f"[WorkflowStatusService] Stopped heartbeat for workflow {workflow_id}")
+
+    def touch_heartbeat(self, workflow_id: int) -> None:
+        """Update last_heartbeat_at to now for the given workflow."""
+        try:
+            db = next(get_db())
+            workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+            if workflow and workflow.status == "running":
+                workflow.last_heartbeat_at = datetime.utcnow()
+                db.commit()
+        except Exception as e:
+            logger.debug(f"[WorkflowStatusService] touch_heartbeat error for {workflow_id}: {e}")
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
     
     def _heartbeat_worker(self, workflow_id: int):
         """Background worker that updates heartbeat timestamp"""
