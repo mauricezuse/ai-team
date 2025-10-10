@@ -41,6 +41,13 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   // UI state
   activeTabIndex: number = 1; // default to Executions tab to preserve current test expectations
 
+  // Aggregated insights
+  allCodeFiles: any[] = [];
+  prInfo: { url?: string; skippedReason?: string } = {};
+  llmConversations: Array<{ id: number; label: string; calls: any[] }> = [];
+  llmSelectedConvId: number | null = null;
+  escalationsList: Array<{ from_agent: string; to_agent: string; reason: string; status: string }> = [];
+
   constructor(
     private route: ActivatedRoute, 
     private workflowService: WorkflowService,
@@ -78,6 +85,9 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
           }
         });
         this.initializeConversations();
+
+        // Compute aggregated views
+        this.computeAggregates();
       },
       error: (error) => {
         console.error('Error loading workflow:', error);
@@ -190,6 +200,56 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
       this.uniqueAgents = [...new Set(this.workflow.conversations.map((c: any) => c.agent))] as string[];
       this.agentOptions = this.uniqueAgents.map(a => ({ label: a, value: a }));
     }
+  }
+
+  private computeAggregates() {
+    const wf: any = this.workflow;
+    if (!wf) return;
+    // Aggregate code files
+    const files: any[] = [];
+    (wf.conversations || []).forEach((c: any) => {
+      (c.code_files || []).forEach((f: any) => files.push(f));
+    });
+    // de-duplicate by path/name string rep
+    const seen = new Set<string>();
+    this.allCodeFiles = files.filter(f => {
+      const key = typeof f === 'string' ? f : (f.file_path || f.filename || JSON.stringify(f));
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // PR info
+    let prUrl: string | undefined;
+    let skippedReason: string | undefined;
+    (wf.conversations || []).forEach((c: any) => {
+      if (c.step === 'pr_created' && c.pr && c.pr.url) {
+        prUrl = c.pr.url;
+      }
+      if (c.step === 'pr_skipped' && c.reason) {
+        skippedReason = c.reason;
+      }
+    });
+    this.prInfo = { url: prUrl, skippedReason };
+
+    // LLM conversations list
+    this.llmConversations = (wf.conversations || [])
+      .filter((c: any) => c.llm_calls && c.llm_calls.length > 0)
+      .map((c: any) => ({ id: c.id, label: `${c.agent || 'Agent'} - ${c.step || 'Step'}`, calls: c.llm_calls }));
+    this.llmSelectedConvId = this.llmConversations.length > 0 ? this.llmConversations[0].id : null;
+
+    // Escalations aggregate
+    const escalations: any[] = [];
+    (wf.conversations || []).forEach((c: any) => {
+      (c.escalations || []).forEach((e: any) => escalations.push(e));
+    });
+    this.escalationsList = escalations;
+  }
+
+  get selectedLlmCalls(): any[] {
+    if (!this.llmSelectedConvId) return [];
+    const found = this.llmConversations.find(x => x.id === this.llmSelectedConvId);
+    return found ? (found.calls || []) : [];
   }
 
   filterConversations() {

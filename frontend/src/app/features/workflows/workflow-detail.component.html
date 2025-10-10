@@ -50,6 +50,16 @@
           <strong>Description:</strong>
           <pre>{{ wf.jira_story_description }}</pre>
         </div>
+        <div *ngIf="prInfo.url || prInfo.skippedReason" class="pr-summary">
+          <p *ngIf="prInfo.url"><strong>PR:</strong> <a [href]="prInfo.url" target="_blank">{{ prInfo.url }}</a></p>
+          <p *ngIf="!prInfo.url && prInfo.skippedReason"><strong>PR:</strong> Skipped ({{ prInfo.skippedReason }})</p>
+        </div>
+        <div *ngIf="allCodeFiles.length > 0" class="code-files-summary">
+          <h4>Code Files Changed/Generated</h4>
+          <ul>
+            <li *ngFor="let file of allCodeFiles">{{ getFileDisplayName(file) }} <small>({{ getFilePath(file) }})</small></li>
+          </ul>
+        </div>
       </div>
     </p-tabPanel>
 
@@ -246,6 +256,58 @@
       </div>
       <div *ngIf="!wf.conversations || wf.conversations.length === 0" class="no-conversations">
         <p>No conversations yet</p>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="LLM Calls" data-testid="tab-llm-calls">
+      <div *ngIf="llmConversations.length > 0">
+        <label for="llmConv">Conversation:</label>
+        <select id="llmConv" [(ngModel)]="llmSelectedConvId">
+          <option *ngFor="let conv of llmConversations" [ngValue]="conv.id">{{ conv.label }}</option>
+        </select>
+        <div class="llm-calls-table" *ngIf="selectedLlmCalls.length > 0">
+          <table class="p-datatable-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Prompt</th>
+                <th>Completion</th>
+                <th>Total Tokens</th>
+                <th>Cost</th>
+                <th>Latency</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let call of selectedLlmCalls">
+                <td>{{ call.model }}</td>
+                <td>{{ call.prompt_tokens }}</td>
+                <td>{{ call.completion_tokens }}</td>
+                <td>{{ call.total_tokens }}</td>
+                <td>${{ call.cost }}</td>
+                <td>{{ call.response_time_ms }}ms</td>
+                <td>{{ call.timestamp | date:'short' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div *ngIf="selectedLlmCalls.length === 0">
+          <p>No calls found for selected conversation</p>
+        </div>
+      </div>
+      <div *ngIf="llmConversations.length === 0">
+        <p>No LLM calls recorded</p>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="Escalations" data-testid="tab-escalations">
+      <div *ngIf="escalationsList.length > 0">
+        <ul>
+          <li *ngFor="let e of escalationsList">{{ e.from_agent }} → {{ e.to_agent }} — {{ e.reason }} ({{ e.status }})</li>
+        </ul>
+      </div>
+      <div *ngIf="escalationsList.length === 0">
+        <p>No escalations</p>
       </div>
     </p-tabPanel>
   </p-tabView>
