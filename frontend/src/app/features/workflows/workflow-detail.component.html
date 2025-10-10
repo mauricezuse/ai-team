@@ -334,37 +334,60 @@
     </p-tabPanel>
 
     <p-tabPanel header="Code Diffs" data-testid="tab-code-diffs">
-      <div *ngIf="activeTabIndex === 5 && allCodeFiles.length > 0">
-        <p-accordion>
-          <p-accordionTab *ngFor="let file of allCodeFiles" [header]="getFileDisplayName(file)">
-            <div class="code-file-content">
-              <div class="code-file-header">
-                <span class="file-name">
-                  <i class="pi pi-file"></i> {{ getFileDisplayName(file) }}
-                </span>
-                <span class="file-path">{{ getFilePath(file) }}</span>
-                <a [href]="getFileUrl(file)" target="_blank" class="file-link">
-                  <i class="pi pi-external-link"></i> View in Repository
-                </a>
+      <div *ngIf="activeTabIndex === 5">
+        <div *ngIf="diffs.length > 0; else noDiffs">
+          <p-accordion>
+            <p-accordionTab *ngFor="let d of diffs" [header]="d.path">
+              <div class="code-file-content">
+                <div class="code-file-header">
+                  <span class="file-name">
+                    <i class="pi pi-file"></i> {{ d.path.split('/').pop() }}
+                  </span>
+                  <span class="file-path">{{ d.path }}</span>
+                </div>
+                <div class="code-preview">
+                  <pre><code>{{ d.patch }}</code></pre>
+                </div>
               </div>
-              <div class="code-preview">
-                <pre><code>{{ getCodePreview(file) }}</code></pre>
-              </div>
-            </div>
-          </p-accordionTab>
-        </p-accordion>
-      </div>
-      <div *ngIf="activeTabIndex === 5 && allCodeFiles.length === 0">
-        <p>No code changes detected yet</p>
+            </p-accordionTab>
+          </p-accordion>
+        </div>
+        <ng-template #noDiffs>
+          <p>No code changes detected yet</p>
+        </ng-template>
       </div>
     </p-tabPanel>
 
     <p-tabPanel header="PR & Checks" data-testid="tab-pr-checks">
       <div *ngIf="prInfo.url; else prMissing">
         <p><strong>Pull Request:</strong> <a [href]="prInfo.url" target="_blank">{{ prInfo.url }}</a></p>
-        <div class="checks">
-          <p><em>Required status checks:</em> Not available yet — backend integration pending.</p>
+        <div class="checks" *ngIf="prChecks.length > 0; else noChecks">
+          <table class="p-datatable-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Conclusion</th>
+                <th>Started</th>
+                <th>Completed</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let c of prChecks">
+                <td>{{ c.name }}</td>
+                <td>{{ c.status }}</td>
+                <td>{{ c.conclusion }}</td>
+                <td>{{ c.started_at | date:'short' }}</td>
+                <td>{{ c.completed_at | date:'short' }}</td>
+                <td><a *ngIf="c.html_url" [href]="c.html_url" target="_blank">Open</a></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+        <ng-template #noChecks>
+          <p>No checks available yet</p>
+        </ng-template>
       </div>
       <ng-template #prMissing>
         <p *ngIf="prInfo.skippedReason; else noPrInfo">PR skipped: {{ prInfo.skippedReason }}</p>
@@ -375,7 +398,32 @@
     </p-tabPanel>
 
     <p-tabPanel header="Artifacts" data-testid="tab-artifacts">
-      <p>No artifacts available yet</p>
+      <div *ngIf="artifacts.length > 0; else noArtifacts">
+        <table class="p-datatable-table">
+          <thead>
+            <tr>
+              <th>Kind</th>
+              <th>URI</th>
+              <th>Size</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let a of artifacts">
+              <td>{{ a.kind }}</td>
+              <td>
+                <a *ngIf="a.uri" [href]="a.uri" target="_blank">{{ a.uri }}</a>
+                <span *ngIf="!a.uri">-</span>
+              </td>
+              <td>{{ a.size_bytes || '-' }}</td>
+              <td>{{ a.created_at | date:'short' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ng-template #noArtifacts>
+        <p>No artifacts available yet</p>
+      </ng-template>
     </p-tabPanel>
   </p-tabView>
 

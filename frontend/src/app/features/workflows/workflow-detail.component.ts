@@ -44,6 +44,9 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   // Aggregated insights
   allCodeFiles: any[] = [];
   prInfo: { url?: string; skippedReason?: string } = {};
+  prChecks: any[] = [];
+  artifacts: any[] = [];
+  diffs: any[] = [];
   llmConversations: Array<{ id: number; label: string; calls: any[] }> = [];
   llmSelectedConvId: number | null = null;
   escalationsList: Array<{ from_agent: string; to_agent: string; reason: string; status: string }> = [];
@@ -92,6 +95,32 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
 
         // Compute aggregated views
         this.computeAggregates();
+
+        // Fetch PR summary and checks
+        this.advancedService.getWorkflowPr(String(workflow.id)).subscribe({
+          next: (pr) => {
+            if (pr && pr.url) {
+              this.prInfo = { url: pr.url };
+            }
+          },
+          error: () => {}
+        });
+        this.advancedService.listPrChecks(String(workflow.id), { page: 1, page_size: 50 }).subscribe({
+          next: (checks) => { this.prChecks = checks || []; },
+          error: () => { this.prChecks = []; }
+        });
+
+        // Fetch diffs meta
+        this.advancedService.listDiffs(String(workflow.id), { page: 1, page_size: 100 }).subscribe({
+          next: (diffs) => { this.diffs = diffs || []; },
+          error: () => { this.diffs = []; }
+        });
+
+        // Fetch artifacts
+        this.advancedService.listArtifacts(String(workflow.id), { page: 1, page_size: 50 }).subscribe({
+          next: (arts) => { this.artifacts = arts || []; },
+          error: () => { this.artifacts = []; }
+        });
       },
       error: (error) => {
         console.error('Error loading workflow:', error);

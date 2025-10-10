@@ -10,8 +10,11 @@ export class WorkflowAdvancedService {
     let httpParams = new HttpParams();
     if (params) {
       Object.entries(params).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== '') {
-          httpParams = httpParams.set(k, String(v));
+        if (v !== undefined && v !== null) {
+          const s = String(v);
+          if (s !== '') {
+            httpParams = httpParams.set(k, s);
+          }
         }
       });
     }
@@ -35,6 +38,50 @@ export class WorkflowAdvancedService {
   compareExecutions(workflowId: string, execA: number, execB: number): Observable<any> {
     let params = new HttpParams().set('execA', String(execA)).set('execB', String(execB));
     return this.http.get<any>(`/api/workflows/${workflowId}/executions/compare`, { params });
+  }
+
+  // New: PR summary for workflow
+  getWorkflowPr(workflowId: string): Observable<any> {
+    return this.http.get<any>(`/api/workflows/${workflowId}/pr`);
+  }
+
+  // New: PR checks for workflow
+  listPrChecks(workflowId: string, params?: { page?: number; page_size?: number }): Observable<any[]> {
+    let httpParams = new HttpParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          httpParams = httpParams.set(k, String(v));
+        }
+      });
+    }
+    return this.http.get<any[]>(`/api/workflows/${workflowId}/pr/checks`, { params: httpParams });
+  }
+
+  // New: Diffs for workflow
+  listDiffs(workflowId: string, params?: { page?: number; page_size?: number; path?: string }): Observable<any[]> {
+    let httpParams = new HttpParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          httpParams = httpParams.set(k, String(v));
+        }
+      });
+    }
+    return this.http.get<any[]>(`/api/workflows/${workflowId}/diffs`, { params: httpParams });
+  }
+
+  // New: Artifacts for workflow
+  listArtifacts(workflowId: string, params?: { page?: number; page_size?: number; kind?: string }): Observable<any[]> {
+    let httpParams = new HttpParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          httpParams = httpParams.set(k, String(v));
+        }
+      });
+    }
+    return this.http.get<any[]>(`/api/workflows/${workflowId}/artifacts`, { params: httpParams });
   }
 }
 
