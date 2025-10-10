@@ -15,7 +15,8 @@ ENVIRONMENT=development
 
 # (Optional) GitHub Integration
 GITHUB_TOKEN=your-github-token
-GITHUB_REPO=your-org/your-repo
+NEGISHI_GITHUB_REPO=your-org/your-repo
+GITHUB_WEBHOOK_SECRET=your-webhook-secret
 
 # (Optional) Jira Integration
 JIRA_API_TOKEN=your-jira-api-token

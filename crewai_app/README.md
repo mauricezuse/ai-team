@@ -80,6 +80,18 @@ crewai_app/
 - `GET /health` - Health check endpoint
 - `GET /docs` - API documentation (Swagger UI)
 
+### PR, Checks, Diffs, Artifacts
+- `GET /workflows/{workflow_id}/pr` – Pull Request summary
+- `GET /workflows/{workflow_id}/pr/checks` – PR checks (paginated)
+- `GET /workflows/{workflow_id}/diffs` – Diffs for workflow (paginated, optional `path` filter)
+- `GET /workflows/{workflow_id}/artifacts` – Artifacts (paginated, optional `kind` filter)
+- `POST /workflows/{workflow_id}/pr/refresh` – Enqueue background refresh of PR & checks
+- `POST /workflows/{workflow_id}/diffs/refresh` – Enqueue background refresh of diffs
+- `POST /workflows/{workflow_id}/artifacts/refresh` – Enqueue background refresh of artifacts
+
+### Webhooks
+- `POST /webhooks/github` – GitHub webhook ingestion (pull_request, check_run/check_suite) with HMAC signature verification
+
 ## Database Models
 
 ### Workflow
@@ -135,6 +147,8 @@ NEGISHI_JIRA_BASE_URL=https://your-domain.atlassian.net
 # GitHub Integration
 GITHUB_TOKEN=your_token
 NEGISHI_GITHUB_REPO=org/repo
+USE_REAL_GITHUB=true
+GITHUB_WEBHOOK_SECRET=your_webhook_secret
 
 # Azure OpenAI
 AZURE_OPENAI_API_KEY=your_key

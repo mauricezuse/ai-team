@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Body, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, Body, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -24,6 +24,8 @@ from crewai_app.database import PullRequest, CheckRun, Artifact, Diff
 from crewai_app.services.background_jobs import refresh_pr_and_checks, refresh_diffs, refresh_artifacts
 from crewai_app.utils.feature_flags import FeatureFlags
 from crewai_app.services.workflow_status_service import workflow_status_service
+import hmac
+import hashlib
 
 app = FastAPI(title="CrewAI Orchestration Platform")
 flags = FeatureFlags()
@@ -932,6 +934,102 @@ def list_pr_checks(workflow_id: int, db: Session = Depends(get_db), page: int = 
     items = q.order_by(CheckRun.started_at.desc().nullslast()).offset((page - 1) * page_size).limit(page_size).all()
     return items
 
+# --- GitHub Webhook Ingestion ---
+def _verify_github_signature(secret: Optional[str], body: bytes, signature_header: Optional[str]) -> bool:
+    if not secret:
+        return True
+    if not signature_header or not signature_header.startswith('sha256='):
+        return False
+    sig = signature_header.split('=')[1]
+    mac = hmac.new(secret.encode('utf-8'), msg=body, digestmod=hashlib.sha256)
+    expected = mac.hexdigest()
+    # Use hmac.compare_digest to avoid timing attacks
+    return hmac.compare_digest(expected, sig)
+
+@app.post("/webhooks/github")
+async def github_webhook(request: Request, db: Session = Depends(get_db)):
+    raw_body = await request.body()
+    signature = request.headers.get('X-Hub-Signature-256')
+    event = request.headers.get('X-GitHub-Event', '').strip()
+    if not _verify_github_signature(settings.github_webhook_secret, raw_body, signature):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    # Handle events
+    if event == 'pull_request':
+        action = payload.get('action')
+        pr = payload.get('pull_request') or {}
+        repo_html = (payload.get('repository') or {}).get('html_url')
+        if pr:
+            number = pr.get('number')
+            url = pr.get('html_url')
+            title = pr.get('title')
+            state = pr.get('state')
+            head_branch = (pr.get('head') or {}).get('ref')
+            base_branch = (pr.get('base') or {}).get('ref')
+            head_sha = (pr.get('head') or {}).get('sha')
+
+            # Best-effort mapping: find workflow by jira_story_id in title if present
+            workflow = None
+            if title:
+                wf = db.query(Workflow).filter(Workflow.name.like(f"%{title.split(':')[0]}%"))
+                workflow = wf.first()
+            # Fallback: latest workflow row
+            workflow = workflow or db.query(Workflow).order_by(Workflow.created_at.desc()).first()
+            if workflow:
+                pr_row = db.query(PullRequest).filter(PullRequest.workflow_id == workflow.id, PullRequest.pr_number == number).first()
+                if not pr_row:
+                    pr_row = PullRequest(workflow_id=workflow.id, pr_number=number)
+                pr_row.url = url
+                pr_row.title = title
+                pr_row.state = state
+                pr_row.head_branch = head_branch
+                pr_row.base_branch = base_branch
+                pr_row.head_sha = head_sha
+                pr_row.created_at = pr.get('created_at') or pr_row.created_at
+                pr_row.merged_at = pr.get('merged_at')
+                db.add(pr_row)
+                db.commit()
+        return {"status": "ok"}
+
+    if event in ('check_run', 'check_suite'):
+        # Normalize to a list of check runs
+        runs = []
+        if event == 'check_run':
+            cr = payload.get('check_run') or {}
+            if cr:
+                runs = [cr]
+        else:
+            suite = payload.get('check_suite') or {}
+            runs = suite.get('check_runs', []) if isinstance(suite, dict) else []
+
+        for r in runs:
+            prs = r.get('pull_requests') or []
+            # For each referenced PR, update CheckRun rows
+            for pr_ref in prs:
+                pr_number = pr_ref.get('number')
+                pr_row = db.query(PullRequest).filter(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()).first()
+                if not pr_row:
+                    continue
+                row = CheckRun(
+                    workflow_id=pr_row.workflow_id,
+                    pr_id=pr_row.id,
+                    name=r.get('name'),
+                    status=r.get('status'),
+                    conclusion=r.get('conclusion'),
+                    html_url=r.get('html_url') or r.get('details_url'),
+                    started_at=r.get('started_at'),
+                    completed_at=r.get('completed_at')
+                )
+                db.add(row)
+        db.commit()
+        return {"status": "ok"}
+
+    # Other events not handled explicitly
+    return {"status": "ignored", "event": event}
 # --- Diffs API ---
 @app.get("/workflows/{workflow_id:int}/diffs", response_model=List[DiffResponse])
 def list_diffs(workflow_id: int, db: Session = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200), path: Optional[str] = Query(None)):
