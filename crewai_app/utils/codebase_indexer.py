@@ -171,7 +171,9 @@ def summarize_file_content(content: str, max_length: int = 500) -> str:
 async def async_parse_file(file_path: str, rel_path: str) -> Optional[dict]:
     try:
         if not os.path.exists(file_path):
-            return None
+            abs_path = os.path.abspath(file_path)
+            logging.error(f"async_parse_file: file does not exist: {abs_path}")
+            raise FileNotFoundError(abs_path)
         async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
             content = await f.read()
         
@@ -224,8 +226,9 @@ def index_selected_files(root_dir: str, selected_files: List[str], use_cache: bo
         file_path = os.path.join(root_dir, rel_path)
         try:
             if not os.path.exists(file_path):
-                logging.debug(f"Skipping non-existent file during indexing: {rel_path}")
-                continue
+                abs_path = os.path.abspath(file_path)
+                logging.error(f"index_selected_files: file does not exist: {abs_path}")
+                raise FileNotFoundError(abs_path)
             mtime = os.path.getmtime(file_path)
             if use_cache and cache and rel_path in cache and cache[rel_path]['mtime'] == mtime:
                 code_index[rel_path] = cache[rel_path]['index']
@@ -347,7 +350,9 @@ class SemanticSearchAgent:
     def summarize_file(self, file_path: str, max_lines: int = 50) -> str:
         try:
             if not os.path.exists(file_path):
-                return ''
+                abs_path = os.path.abspath(file_path)
+                logging.error(f"summarize_file: file does not exist: {abs_path}")
+                raise FileNotFoundError(abs_path)
             with open(file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             return ''.join(lines[:max_lines])
@@ -376,7 +381,9 @@ class SemanticSearchAgent:
                     continue
                 rel_path = os.path.join(d, f)
                 if not os.path.exists(rel_path):
-                    continue
+                    abs_path = os.path.abspath(rel_path)
+                    logging.error(f"select_relevant_files: file does not exist: {abs_path}")
+                    raise FileNotFoundError(abs_path)
                 summary = self.summarize_file(rel_path)
                 if not summary or not summary.strip():
                     logging.debug(f"[SemanticSearchAgent] File summary for {rel_path} is empty or whitespace. Skipping embedding.")
