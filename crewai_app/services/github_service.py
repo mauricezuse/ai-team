@@ -307,3 +307,22 @@ class GitHubService:
             return out
         except Exception:
             return []
+
+    def rerun_check_suite(self, check_suite_id: int) -> bool:
+        if not self.use_real:
+            print(f"[Stub] Would re-run check suite {check_suite_id}")
+            return True
+        try:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            url = f"{self.api_url}/check-suites/{check_suite_id}/rerequest"
+            resp = requests.post(url, headers=headers)
+            if 200 <= resp.status_code < 300:
+                return True
+            print(f"[GitHub ERROR] Rerun check suite failed: {resp.status_code} {resp.text}")
+            return False
+        except Exception as e:
+            print(f"[GitHub ERROR] rerun_check_suite failed: {e}")
+            return False

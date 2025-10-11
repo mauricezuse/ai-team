@@ -7,6 +7,9 @@ import uuid
 import json
 import threading
 import itertools
+import hashlib
+from crewai_app.services.conversation_service import ConversationService
+from crewai_app.utils.logging_sse import get_logging_sse_helper
 
 if TYPE_CHECKING:
     try:
@@ -58,12 +61,19 @@ class PromptTooLargeError(Exception):
         self.prompt_length = prompt_length
         self.step = step
 
+class TokenGovernanceError(Exception):
+    def __init__(self, message, token_math=None, truncated_info=None):
+        super().__init__(message)
+        self.token_math = token_math or {}
+        self.truncated_info = truncated_info or {}
+
 class OpenAIService:
     # Shared rate limit state for all instances
     _rate_limited_until: Dict[str, float] = {}
     _lock = threading.Lock()
 
-    def __init__(self, deployment: Optional[str] = None):
+    def __init__(self, deployment: Optional[str] = None, workflow_id: Optional[int] = None, 
+                 agent_name: Optional[str] = None, step_name: Optional[str] = None):
         self.deployment = deployment or settings.azure_openai_deployment or ""
         self.api_key = settings.azure_openai_api_key
         self.api_base = settings.azure_openai_endpoint or ""
@@ -73,7 +83,30 @@ class OpenAIService:
         else:
             self.deployments = [self.deployment] if self.deployment else []
         self._deployment_cycle = itertools.cycle(self.deployments) if self.deployments else None
-        logging.info(f"[OpenAIService.__init__] Instantiated with deployment: '{self.deployment}' | api_base: '{self.api_base}'")
+        
+        # Token governance parameters
+        self.workflow_id = workflow_id
+        self.agent_name = agent_name or "unknown"
+        self.step_name = step_name or "unknown"
+        self.context_window = 32000  # Default context window
+        self.safety_buffer_tokens = 1000  # Safety buffer
+        self.hard_cap_tokens = 4000  # Hard cap for max_tokens
+        self.N_recent_turns = 5  # Keep last N turns raw
+        self.max_prompt_tokens_per_step = 8000  # Per-step prompt limit
+        self.max_total_tokens_per_step = 12000  # Per-step total limit
+        
+        # Track shrink attempts to prevent infinite loops
+        self._shrink_attempts = 0
+        self._max_shrink_attempts = 2
+        
+        # Initialize conversation service if workflow_id provided
+        self.conversation_service = None
+        self.logging_sse = None
+        if workflow_id:
+            self.conversation_service = ConversationService(workflow_id, self.agent_name, self.step_name)
+            self.logging_sse = get_logging_sse_helper(workflow_id)
+        
+        logging.info(f"[OpenAIService.__init__] Instantiated with deployment: '{self.deployment}' | api_base: '{self.api_base}' | workflow_id: {workflow_id}")
 
     def _get_next_available_deployment(self):
         if not self._deployment_cycle:
@@ -104,20 +137,130 @@ class OpenAIService:
         except Exception:
             return len(prompt.split())
 
+    def _compute_available_tokens(self, prompt_tokens: int) -> int:
+        """Compute available tokens considering context window and safety buffer"""
+        return self.context_window - prompt_tokens - self.safety_buffer_tokens
+    
+    def _enforce_token_governance(self, prompt: str, max_tokens: int) -> tuple[str, int, Dict[str, Any]]:
+        """
+        Enforce token governance with prompt shrinking if needed.
+        
+        Returns:
+            (shrunk_prompt, capped_max_tokens, governance_info)
+        """
+        prompt_tokens = self.count_tokens(prompt)
+        available_tokens = self._compute_available_tokens(prompt_tokens)
+        
+        # Check per-step budget limits
+        if prompt_tokens > self.max_prompt_tokens_per_step:
+            raise TokenGovernanceError(
+                f"Prompt exceeds per-step limit: {prompt_tokens} > {self.max_prompt_tokens_per_step}",
+                {"prompt_tokens": prompt_tokens, "max_prompt_tokens_per_step": self.max_prompt_tokens_per_step}
+            )
+        
+        # Cap max_tokens
+        capped_max_tokens = min(max_tokens, available_tokens, self.hard_cap_tokens)
+        
+        governance_info = {
+            "prompt_tokens": prompt_tokens,
+            "max_tokens": max_tokens,
+            "available_tokens": available_tokens,
+            "safety_buffer": self.safety_buffer_tokens,
+            "capped_max_tokens": capped_max_tokens,
+            "context_window": self.context_window
+        }
+        
+        # If available tokens <= 0, need to shrink prompt
+        if available_tokens <= 0:
+            if self._shrink_attempts >= self._max_shrink_attempts:
+                raise TokenGovernanceError(
+                    f"Exceeded max shrink attempts ({self._max_shrink_attempts}). Context too large.",
+                    governance_info
+                )
+            
+            self._shrink_attempts += 1
+            shrunk_prompt = self._shrink_prompt(prompt)
+            shrunk_tokens = self.count_tokens(shrunk_prompt)
+            new_available = self._compute_available_tokens(shrunk_tokens)
+            
+            if new_available <= 0:
+                raise TokenGovernanceError(
+                    "Prompt still too large after shrinking",
+                    {**governance_info, "shrunk_tokens": shrunk_tokens, "new_available": new_available}
+                )
+            
+            governance_info.update({
+                "shrunk": True,
+                "original_tokens": prompt_tokens,
+                "shrunk_tokens": shrunk_tokens,
+                "shrink_attempts": self._shrink_attempts
+            })
+            
+            return shrunk_prompt, capped_max_tokens, governance_info
+        
+        return prompt, capped_max_tokens, governance_info
+    
+    def _shrink_prompt(self, prompt: str) -> str:
+        """
+        Shrink prompt using running summary and recent turns strategy.
+        """
+        # Simple implementation: truncate to fit within limits
+        # In production, this would use more sophisticated summarization
+        max_prompt_chars = (self.max_prompt_tokens_per_step - self.safety_buffer_tokens) * 4  # Rough char/token ratio
+        
+        if len(prompt) <= max_prompt_chars:
+            return prompt
+        
+        # Keep first part and last part, truncate middle
+        keep_start = max_prompt_chars // 3
+        keep_end = max_prompt_chars // 3
+        
+        shrunk = prompt[:keep_start] + "\n\n[TRUNCATED]\n\n" + prompt[-keep_end:]
+        
+        # Log truncation details
+        truncated_bytes = len(prompt) - len(shrunk)
+        logging.warning(f"[OpenAIService] Shrunk prompt: {len(prompt)} -> {len(shrunk)} chars, truncated {truncated_bytes} bytes")
+        
+        return shrunk
+    
     def generate(self, prompt: str, max_tokens: int = 512, deployment: Optional[str] = None, step: Optional[str] = None, workflow_id: Optional[int] = None, conversation_id: Optional[int] = None) -> str:
-        prompt_length = self.count_tokens(prompt)
-        logging.info(f"[OpenAIService] Prompt size: {prompt_length} tokens (max {MAX_PROMPT_TOKENS}) at step '{step}'")
-        if prompt_length > MAX_PROMPT_TOKENS * 0.9:
-            logging.warning(f"[OpenAIService] Prompt size is close to the model's context window: {prompt_length} tokens at step '{step}'")
+        # Apply token governance
+        try:
+            governed_prompt, capped_max_tokens, governance_info = self._enforce_token_governance(prompt, max_tokens)
+        except TokenGovernanceError as e:
+            # Create terminal message if conversation service available
+            if self.conversation_service:
+                self.conversation_service.create_terminal_message(
+                    error_message=str(e),
+                    token_math=e.token_math,
+                    truncated_info=e.truncated_info,
+                    resume_hint="Try reducing prompt size or breaking into smaller steps"
+                )
+            raise
+        
+        prompt_length = self.count_tokens(governed_prompt)
+        logging.info(f"[OpenAIService] Prompt size: {prompt_length} tokens (governed) at step '{step}'")
+        
+        # Log governance decisions with SSE parity
+        if governance_info.get("shrunk"):
+            logging.warning(f"[OpenAIService] Prompt shrunk: {governance_info['original_tokens']} -> {governance_info['shrunk_tokens']} tokens")
+            if self.logging_sse:
+                self.logging_sse.log_token_governance(
+                    self.agent_name, self.step_name, governance_info['original_tokens'],
+                    governance_info['max_tokens'], governance_info['available_tokens'],
+                    shrunk=True, truncated_sections=governance_info.get('truncated_sections', [])
+                )
+        
         if prompt_length > MAX_PROMPT_TOKENS:
-            logging.error(f"Prompt too large: {prompt_length} tokens at step '{step}'. Aborting call.")
+            logging.error(f"Prompt still too large after governance: {prompt_length} tokens at step '{step}'. Aborting call.")
             # Log to openai_usage.log as well
             with open('openai_usage.log', 'a') as f:
                 f.write(json.dumps({
                     "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "event": "prompt_too_large",
+                    "event": "prompt_too_large_after_governance",
                     "step": step,
-                    "prompt_length": prompt_length
+                    "prompt_length": prompt_length,
+                    "governance_info": governance_info
                 }) + "\n")
             raise PromptTooLargeError(prompt_length, step)
         # Improved load balancing: select next available deployment
@@ -131,13 +274,13 @@ class OpenAIService:
             api_version=config["api_version"],
             azure_endpoint=self.api_base,
         )
-        # Prepare payload
-        messages = [{"role": "user", "content": prompt}]
+        # Prepare payload with governed prompt
+        messages = [{"role": "user", "content": governed_prompt}]
         token_param = config["token_param"]
         payload = {
             "model": deployment_name,
             "messages": messages,
-            token_param: max_tokens
+            token_param: capped_max_tokens
         }
         # Generate a unique request ID for traceability
         request_id = str(uuid.uuid4())
@@ -150,17 +293,18 @@ class OpenAIService:
             "event": "request_payload",
             "payload": {
                 "model": deployment_name,
-                "max_tokens": max_tokens,
-                "prompt_length": OpenAIService.count_tokens(prompt),
+                "max_tokens": capped_max_tokens,
+                "prompt_length": prompt_length,
+                "governance_info": governance_info,
                 "messages": messages
             }
         }
         with open("openai_usage.log", "a") as f:
             f.write(json.dumps(log_entry) + "\n")
         model_name = deployment_name
-        prompt_tokens = count_tokens(prompt, model=model_name)
-        total_tokens_requested = prompt_tokens + max_tokens
-        usage_logger.info(f"[REQUEST] model={model_name} prompt_tokens={prompt_tokens} max_tokens={max_tokens} total_tokens_requested={total_tokens_requested}")
+        prompt_tokens = prompt_length
+        total_tokens_requested = prompt_tokens + capped_max_tokens
+        usage_logger.info(f"[REQUEST] model={model_name} prompt_tokens={prompt_tokens} max_tokens={capped_max_tokens} total_tokens_requested={total_tokens_requested} governed=True")
 
         max_retries = 6
         delay = 1
@@ -172,26 +316,58 @@ class OpenAIService:
                     response = client.chat.completions.create(
                         model=deployment_name,
                         messages=messages,  # type: ignore
-                        max_tokens=max_tokens
+                        max_tokens=capped_max_tokens
                     )
                 else:
                     response = client.chat.completions.create(
                         model=deployment_name,
                         messages=messages,  # type: ignore
-                        max_completion_tokens=max_tokens
+                        max_completion_tokens=capped_max_tokens
                     )
                 # Log response token usage if available
                 usage = getattr(response, 'usage', None)
                 if usage:
                     usage_logger.info(f"[RESPONSE] model={model_name} prompt_tokens={getattr(usage, 'prompt_tokens', None)} completion_tokens={getattr(usage, 'completion_tokens', None)} total_tokens={getattr(usage, 'total_tokens', None)}")
                 
-                # Capture LLM call data for database storage
-                if workflow_id and conversation_id:
+                # Capture LLM call data for database storage using conversation service
+                if self.conversation_service:
+                    # Get or create conversation
+                    conv_id = self.conversation_service.get_or_create_conversation()
+                    
+                    # Extract usage data
+                    usage = getattr(response, 'usage', None)
+                    actual_prompt_tokens = getattr(usage, 'prompt_tokens', prompt_tokens) if usage else prompt_tokens
+                    completion_tokens = getattr(usage, 'completion_tokens', 0) if usage else 0
+                    response_time_ms = int((time.time() - start_time) * 1000)
+                    
+                    # Determine status
+                    status = "success"
+                    if governance_info.get("shrunk"):
+                        status = "truncated"
+                    
+                    # Record LLM call with governance data
+                    self.conversation_service.record_llm_call(
+                        model=deployment_name,
+                        prompt=governed_prompt,
+                        response=response.choices[0].message.content if response.choices and response.choices[0].message else "",
+                        prompt_tokens=actual_prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        max_tokens=capped_max_tokens,
+                        response_time_ms=response_time_ms,
+                        status=status,
+                        truncated_sections=governance_info.get("truncated_sections", []),
+                        budget_snapshot={
+                            "prompt_budget_remaining": self.max_prompt_tokens_per_step - actual_prompt_tokens,
+                            "step_budget_remaining": self.max_total_tokens_per_step - (actual_prompt_tokens + completion_tokens)
+                        }
+                    )
+                elif workflow_id and conversation_id:
+                    # Fallback to old method for backward compatibility
                     self._capture_llm_call(
                         workflow_id=workflow_id,
                         conversation_id=conversation_id,
                         model=deployment_name,
-                        prompt=prompt,
+                        prompt=governed_prompt,
                         response=response,
                         start_time=start_time,
                         request_id=request_id
