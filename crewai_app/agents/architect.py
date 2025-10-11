@@ -173,6 +173,7 @@ class ArchitectAgent:
         super().__init__(*args, **kwargs)
         self.llm_service = openai_service
         self.last_llm_output = None
+        self.conversation_service = None  # Will be set by workflow
 
     def _cache_get(self, key):
         if not hasattr(self, '_llm_cache'):
@@ -188,17 +189,27 @@ class ArchitectAgent:
         return hashlib.sha256(prompt.encode('utf-8')).hexdigest()
 
     def _run_llm(self, prompt: str, step: str, workflow_id=None, conversation_id=None, **kwargs):
-        """Run LLM with tracking for architect agent. Ignores unknown kwargs like max_tokens safely."""
-        safe_args = {
-            'workflow_id': workflow_id,
-            'conversation_id': conversation_id,
-            'step': step
-        }
-        if 'max_tokens' in kwargs and isinstance(kwargs.get('max_tokens'), int):
-            safe_args['max_tokens'] = kwargs['max_tokens']
-        if 'deployment' in kwargs:
-            safe_args['deployment'] = kwargs['deployment']
-        return self.llm_service.generate(prompt, **safe_args)
+        """Run LLM with tracking for architect agent. Includes ConversationService integration."""
+        # Persist user message if conversation service available
+        if self.conversation_service:
+            self.conversation_service.append_message(
+                role="user",
+                content=prompt,
+                metadata={"step": step, "agent": "architect", "max_tokens": kwargs.get('max_tokens', 1024)}
+            )
+        
+        # Call LLM service
+        result = self.llm_service.generate(prompt, step=step, **kwargs)
+        
+        # Persist assistant response if conversation service available
+        if self.conversation_service:
+            self.conversation_service.append_message(
+                role="assistant",
+                content=result,
+                metadata={"step": step, "agent": "architect"}
+            )
+        
+        return result
 
     def select_relevant_files(self, story, pm_suggestions, codebase_index, workflow_id=None, conversation_id=None):
         description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
@@ -214,12 +225,11 @@ class ArchitectAgent:
         if cached:
             return cached
         time.sleep(10)  # Throttle architect LLM calls
-        deployment = get_next_deployment()
-        logger.info(f"[ArchitectAgent] Using deployment: {deployment} for select_relevant_files")
+        
+        # Use _run_llm to ensure ConversationService integration
         try:
-            result = self.llm_service.generate(
+            result = self._run_llm(
                 prompt, 
-                deployment=deployment, 
                 step="select_relevant_files",
                 workflow_id=workflow_id,
                 conversation_id=conversation_id
@@ -247,15 +257,12 @@ class ArchitectAgent:
             "Example: [{\"title\": \"Update endpoint\", \"description\": \"Add filtering\", \"acceptance_criteria\": [\"Endpoint accepts params\"], \"type\": \"backend\"}]"
         )
         
-        deployment = get_next_deployment()
-        logger.info(f"[ArchitectAgent] Using deployment: {deployment} for generate_backend_plan")
-        
+        # Use _run_llm to ensure ConversationService integration
         try:
-            result = self.llm_service.generate(
+            result = self._run_llm(
                 prompt, 
-                deployment=deployment, 
                 step="dev_agents.backend_plan", 
-                max_tokens=1000,
+                max_tokens=1500,
                 workflow_id=workflow_id,
                 conversation_id=conversation_id
             )
@@ -302,13 +309,11 @@ class ArchitectAgent:
         )
         
         try:
-            deployment = get_next_deployment()
-            logger.info(f"[ArchitectAgent] Using deployment: {deployment} for generate_frontend_plan")
-            llm_output = self.llm_service.generate(
+            # Use _run_llm to ensure ConversationService integration
+            llm_output = self._run_llm(
                 prompt, 
-                deployment=deployment, 
                 step="dev_agents.frontend_plan", 
-                max_tokens=1000,
+                max_tokens=1500,
                 workflow_id=workflow_id,
                 conversation_id=conversation_id
             )
@@ -394,13 +399,11 @@ class ArchitectAgent:
         )
         
         try:
-            deployment = get_next_deployment()
-            logger.info(f"[ArchitectAgent] Using deployment: {deployment} for generate_api_contracts")
-            llm_output = self.llm_service.generate(
+            # Use _run_llm to ensure ConversationService integration
+            llm_output = self._run_llm(
                 prompt, 
-                deployment=deployment, 
                 step="dev_agents.api_contracts", 
-                max_tokens=1000,
+                max_tokens=1500,
                 workflow_id=workflow_id,
                 conversation_id=conversation_id
             )
@@ -504,13 +507,11 @@ class ArchitectAgent:
         )
         
         write_debug_file('architect_user_prompt.txt', prompt)
-        deployment = get_next_deployment()
-        logger.info(f"[ArchitectAgent] Using deployment: {deployment} for generate_plan_for_user_acceptance")
         
         try:
-            result = self.llm_service.generate(
+            # Use _run_llm to ensure ConversationService integration
+            result = self._run_llm(
                 prompt, 
-                deployment=deployment, 
                 step="user_acceptance", 
                 max_tokens=2000,
                 workflow_id=workflow_id,
