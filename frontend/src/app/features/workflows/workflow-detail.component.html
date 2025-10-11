@@ -204,10 +204,30 @@
                 </div>
               </div>
               
-              <div *ngIf="conversation.details" class="conversation-details-text">
+              <div *ngIf="conversation.messages && conversation.messages.length > 0" class="conversation-messages">
+                <strong>Messages ({{ conversation.messages.length }}):</strong>
+                <div *ngFor="let message of conversation.messages; let i = index" class="message-item">
+                  <div class="message-header">
+                    <span class="message-role">{{ message.role }}</span>
+                    <span class="message-timestamp">{{ message.message_metadata?.created_at | date:'short' }}</span>
+                  </div>
+                  <div class="message-content">
+                    <pre>{{ message.content }}</pre>
+                  </div>
+                  <div *ngIf="message.artifacts && message.artifacts.length > 0" class="message-artifacts">
+                    <strong>Artifacts:</strong>
+                    <ul>
+                      <li *ngFor="let artifact of message.artifacts">{{ artifact }}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Fallback for old data structure -->
+              <div *ngIf="!conversation.messages && conversation.details" class="conversation-details-text">
                 <strong>Details:</strong> {{ conversation.details }}
               </div>
-              <div *ngIf="conversation.output" class="conversation-output">
+              <div *ngIf="!conversation.messages && conversation.output" class="conversation-output">
                 <strong>Output:</strong>
                 <pre>{{ conversation.output }}</pre>
               </div>
@@ -284,7 +304,7 @@
                         <div class="request-section">
                           <h4>Request:</h4>
                           <div class="messages">
-                            <div *ngFor="let message of call.request_data.messages" class="message">
+                            <div *ngFor="let message of call.request_data?.messages || []" class="message">
                               <span class="message-role">{{ message.role }}:</span>
                               <div class="message-content">{{ message.content }}</div>
                             </div>
@@ -293,7 +313,7 @@
                         
                         <div class="response-section">
                           <h4>Response:</h4>
-                          <div class="response-content">{{ call.response_data.content }}</div>
+                          <div class="response-content">{{ call.response_data?.content || 'No response data available' }}</div>
                         </div>
                         
                         <div class="usage-breakdown">

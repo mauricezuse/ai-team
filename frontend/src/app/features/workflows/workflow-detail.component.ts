@@ -375,10 +375,15 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     if (!this.workflow?.conversations) return;
 
     this.filteredConversations = this.workflow.conversations.filter((conversation: any) => {
+      // Search in messages content, step name, and agent name
+      const searchInMessages = conversation.messages?.some((msg: any) => 
+        msg.content?.toLowerCase().includes(this.searchTerm.toLowerCase())
+      ) || false;
+      
       const matchesSearch = !this.searchTerm || 
-        conversation.details?.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        conversation.output?.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        conversation.step?.toLowerCase().includes(this.searchTerm.toLowerCase());
+        conversation.step?.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+        conversation.agent?.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+        searchInMessages;
       
       const matchesAgent = !this.selectedAgent || conversation.agent === this.selectedAgent;
       
