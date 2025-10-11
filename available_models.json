@@ -2663,7 +2663,7 @@
     "callRateLimit": null,
     "capabilities": {
       "embeddings": "true",
-      "embeddingsMaxInputs": "2048",
+      "embeddingsMaxInputs": "4048",
       "scaleType": "Standard"
     },
     "deprecation": {
@@ -2719,7 +2719,7 @@
     "callRateLimit": null,
     "capabilities": {
       "embeddings": "true",
-      "embeddingsMaxInputs": "2048",
+      "embeddingsMaxInputs": "4048",
       "scaleType": "Standard"
     },
     "deprecation": {
@@ -3361,7 +3361,7 @@
     "callRateLimit": null,
     "capabilities": {
       "embeddings": "true",
-      "embeddingsMaxInputs": "2048"
+      "embeddingsMaxInputs": "4048"
     },
     "deprecation": {
       "fineTune": null,
@@ -3441,7 +3441,7 @@
     "callRateLimit": null,
     "capabilities": {
       "embeddings": "true",
-      "embeddingsMaxInputs": "2048"
+      "embeddingsMaxInputs": "4048"
     },
     "deprecation": {
       "fineTune": null,

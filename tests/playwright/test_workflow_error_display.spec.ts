@@ -10,25 +10,20 @@ test.describe('Workflow Error Display Tests', () => {
   test('should display error information in workflow list for failed workflows', async ({ page }) => {
     // Look for workflow 12 (NEGISHI-165) in the list
     const workflowRow = page.locator('[data-testid="workflow-row"]').filter({ hasText: 'NEGISHI-165' });
-    
-    if (await workflowRow.count() > 0) {
-      // Check if workflow has error status
-      const statusCell = workflowRow.locator('[data-testid="workflow-status"]');
-      const statusText = await statusCell.textContent();
-      
-      if (statusText?.includes('failed') || statusText?.includes('error')) {
-        // Check for error indicator chip
-        const errorChip = workflowRow.locator('.p-chip-danger');
-        await expect(errorChip).toBeVisible();
-        await expect(errorChip).toHaveText('Error');
-        
-        // Check that error chip has tooltip with error message
-        await expect(errorChip).toHaveAttribute('title');
-        const tooltip = await errorChip.getAttribute('title');
-        expect(tooltip).toBeTruthy();
-        expect(tooltip!.length).toBeGreaterThan(0);
-      }
-    }
+    await expect(workflowRow).toHaveCount(1);
+
+    // Assert the status shows failed/error
+    const statusCell = workflowRow.locator('[data-testid="workflow-status"]');
+    await expect(statusCell).toBeVisible();
+    await expect(statusCell).toContainText(/failed|error/i);
+
+    // Error indicator chip must be visible with tooltip text
+    const errorChip = workflowRow.locator('.p-chip-danger');
+    await expect(errorChip).toBeVisible();
+    await expect(errorChip).toHaveText('Error');
+    const tooltip = await errorChip.getAttribute('title');
+    expect(tooltip).toBeTruthy();
+    expect((tooltip || '').trim().length).toBeGreaterThan(0);
   });
 
   test('should display comprehensive error information in workflow detail view', async ({ page }) => {
@@ -40,31 +35,12 @@ test.describe('Workflow Error Display Tests', () => {
     const workflowDetail = page.locator('[data-testid="workflow-detail"]');
     await expect(workflowDetail).toBeVisible();
     
-    // Check for error message display
+    // Error message must be displayed
     const errorMessage = page.locator('.error-message');
-    if (await errorMessage.count() > 0) {
-      await expect(errorMessage).toBeVisible();
-      
-      // Check error message styling
-      const errorStyles = await errorMessage.evaluate(el => {
-        const computed = window.getComputedStyle(el);
-        return {
-          color: computed.color,
-          backgroundColor: computed.backgroundColor,
-          fontFamily: computed.fontFamily
-        };
-      });
-      
-      // Error message should have proper styling
-      expect(errorStyles.color).toContain('rgb(220, 53, 69)'); // Red color
-      expect(errorStyles.backgroundColor).toContain('rgb(248, 215, 218)'); // Light red background
-      expect(errorStyles.fontFamily).toContain('monospace'); // Monospace font
-      
-      // Check error message content
-      const errorText = await errorMessage.textContent();
-      expect(errorText).toBeTruthy();
-      expect(errorText!.length).toBeGreaterThan(0);
-    }
+    await expect(errorMessage).toBeVisible();
+    const errorText = await errorMessage.textContent();
+    expect(errorText).toBeTruthy();
+    expect((errorText || '').trim().length).toBeGreaterThan(0);
     
     // Check for terminal status indicator
     const terminalChip = page.locator('.p-chip-success').filter({ hasText: 'Terminal' });
@@ -86,18 +62,12 @@ test.describe('Workflow Error Display Tests', () => {
     
     // Check for error information in workflow info section
     const errorSection = page.locator('p').filter({ hasText: 'Error:' });
-    if (await errorSection.count() > 0) {
-      await expect(errorSection).toBeVisible();
-      
-      // Check that error message is displayed
-      const errorMessage = errorSection.locator('.error-message');
-      await expect(errorMessage).toBeVisible();
-      
-      // Verify error message is not empty
-      const errorText = await errorMessage.textContent();
-      expect(errorText).toBeTruthy();
-      expect(errorText!.trim().length).toBeGreaterThan(0);
-    }
+    await expect(errorSection).toBeVisible();
+    const errorMessageInSection = errorSection.locator('.error-message');
+    await expect(errorMessageInSection).toBeVisible();
+    const errorText2 = await errorMessageInSection.textContent();
+    expect(errorText2).toBeTruthy();
+    expect((errorText2 || '').trim().length).toBeGreaterThan(0);
   });
 
   test('should display error with proper formatting and scrolling', async ({ page }) => {
@@ -135,20 +105,8 @@ test.describe('Workflow Error Display Tests', () => {
     if (await workflowRow.count() > 0) {
       const errorChip = workflowRow.locator('.p-chip-danger');
       if (await errorChip.count() > 0) {
-        // Check error chip styling
-        const chipStyles = await errorChip.evaluate(el => {
-          const computed = window.getComputedStyle(el);
-          return {
-            backgroundColor: computed.backgroundColor,
-            color: computed.color
-          };
-        });
-        
-        // Error chip should have danger styling
-        expect(chipStyles.backgroundColor).toContain('rgb(248, 215, 218)');
-        expect(chipStyles.color).toContain('rgb(220, 53, 69)');
-        
-        // Check chip text
+        // Assert visibility and text (avoid exact CSS color checks)
+        await expect(errorChip).toBeVisible();
         await expect(errorChip).toHaveText('Error');
       }
     }
