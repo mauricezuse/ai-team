@@ -18,7 +18,7 @@ from crewai_app.workflows.story_implementation_workflow import StoryImplementati
 from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.config import settings
 from crewai_app.database import get_db, init_database, Workflow, Conversation, CodeFile, Escalation, Collaboration
-from crewai_app.database import LLMCall
+from crewai_app.database import LLMCall, Message
 from crewai_app.database import Execution
 from crewai_app.database import PullRequest, CheckRun, Artifact, Diff
 from crewai_app.services.background_jobs import refresh_pr_and_checks, refresh_diffs, refresh_artifacts
@@ -394,6 +394,8 @@ def get_workflow_db(workflow_id: int, db: Session = Depends(get_db), if_none_mat
         # Get escalations and collaborations
         escalations = db.query(Escalation).filter(Escalation.conversation_id == conv.id).all()
         collaborations = db.query(Collaboration).filter(Collaboration.conversation_id == conv.id).all()
+        # Get messages for this conversation
+        messages = db.query(Message).filter(Message.conversation_id == conv.id).order_by(Message.id).all()
         
         # Infer agent if missing
         inferred_agent = conv.agent or step_to_agent.get((conv.step or "").strip().lower(), "")
@@ -424,6 +426,7 @@ def get_workflow_db(workflow_id: int, db: Session = Depends(get_db), if_none_mat
             "escalations": [{"from_agent": e.from_agent, "to_agent": e.to_agent, "reason": e.reason, "status": e.status} for e in escalations],
             "collaborations": [{"from_agent": c.from_agent, "to_agent": c.to_agent, "request_type": c.request_type, "status": c.status} for c in collaborations],
             "llm_calls": llm_calls_data,
+            "messages": [{"id": m.id, "role": m.role, "content": m.content, "artifacts": m.artifacts or [], "message_metadata": m.message_metadata or {}} for m in messages],
             "total_tokens_used": conv.total_tokens_used or 0,
             "total_cost": conv.total_cost or "0.00"
         }
@@ -830,13 +833,20 @@ def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):
         # Get workflow name for response
         workflow_name = workflow.name
         
-        # Delete related data (cascading should handle this, but let's be explicit)
+        # Delete related data in the correct order to avoid foreign key constraints
         # Get conversation IDs first
         conversation_ids = db.query(Conversation.id).filter(Conversation.workflow_id == workflow_id).all()
         conversation_ids = [conv_id[0] for conv_id in conversation_ids]
         
-        # Delete escalations and collaborations for these conversations
+        # Delete in order: LLM calls -> Messages -> Escalations -> Collaborations -> Conversations
         if conversation_ids:
+            # Delete LLM calls first (they reference conversations)
+            db.query(LLMCall).filter(LLMCall.conversation_id.in_(conversation_ids)).delete()
+            
+            # Delete messages (they reference conversations)
+            db.query(Message).filter(Message.conversation_id.in_(conversation_ids)).delete()
+            
+            # Delete escalations and collaborations for these conversations
             db.query(Escalation).filter(Escalation.conversation_id.in_(conversation_ids)).delete()
             db.query(Collaboration).filter(Collaboration.conversation_id.in_(conversation_ids)).delete()
         
