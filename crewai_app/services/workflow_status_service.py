@@ -7,7 +7,7 @@ import time
 from typing import Dict, Any, Optional, Set
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from crewai_app.database import get_db, Workflow
+from crewai_app.database import get_db, Workflow, with_db_retry, SafeDBSession
 from crewai_app.config import settings
 from crewai_app.utils.logger import logger
 
@@ -24,6 +24,7 @@ class WorkflowStatusService:
         # Start background audit task
         self._start_audit_task()
     
+    @with_db_retry(max_retries=3, delay=0.1)
     def finalize_workflow_status(
         self, 
         workflow_id: int, 
@@ -40,41 +41,34 @@ class WorkflowStatusService:
             return False
         
         try:
-            db = next(get_db())
-            workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-            
-            if not workflow:
-                logger.error(f"[WorkflowStatusService] Workflow {workflow_id} not found")
-                return False
-            
-            # Check if already terminal - enforce invariant
-            if workflow.status in ["completed", "failed", "cancelled"]:
-                logger.info(f"[WorkflowStatusService] Workflow {workflow_id} already in terminal state: {workflow.status}")
+            with SafeDBSession() as db:
+                workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+                
+                if not workflow:
+                    logger.error(f"[WorkflowStatusService] Workflow {workflow_id} not found")
+                    return False
+                
+                # Check if already terminal - enforce invariant
+                if workflow.status in ["completed", "failed", "cancelled"]:
+                    logger.info(f"[WorkflowStatusService] Workflow {workflow_id} already in terminal state: {workflow.status}")
+                    return True
+                
+                # Update to terminal status
+                workflow.status = terminal_status
+                workflow.finished_at = finished_at or datetime.utcnow()
+                if error:
+                    workflow.error = error
+                workflow.updated_at = datetime.utcnow()
+                
+                # Stop heartbeat for this workflow
+                self._stop_workflow_heartbeat(workflow_id)
+                
+                logger.info(f"[WorkflowStatusService] Finalized workflow {workflow_id} with status: {terminal_status}")
                 return True
-            
-            # Update to terminal status
-            workflow.status = terminal_status
-            workflow.finished_at = finished_at or datetime.utcnow()
-            if error:
-                workflow.error = error
-            workflow.updated_at = datetime.utcnow()
-            
-            db.commit()
-            
-            # Stop heartbeat for this workflow
-            self._stop_workflow_heartbeat(workflow_id)
-            
-            logger.info(f"[WorkflowStatusService] Finalized workflow {workflow_id} with status: {terminal_status}")
-            return True
-            
+                
         except Exception as e:
             logger.error(f"[WorkflowStatusService] Failed to finalize workflow {workflow_id}: {e}")
             return False
-        finally:
-            try:
-                db.close()
-            except:
-                pass
     
     def start_workflow_heartbeat(self, workflow_id: int) -> bool:
         """Start heartbeat tracking for a workflow"""
@@ -107,21 +101,17 @@ class WorkflowStatusService:
                 del self._heartbeat_threads[workflow_id]
                 logger.info(f"[WorkflowStatusService] Stopped heartbeat for workflow {workflow_id}")
 
+    @with_db_retry(max_retries=3, delay=0.1)
     def touch_heartbeat(self, workflow_id: int) -> None:
         """Update last_heartbeat_at to now for the given workflow."""
         try:
-            db = next(get_db())
-            workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-            if workflow and workflow.status == "running":
-                workflow.last_heartbeat_at = datetime.utcnow()
-                db.commit()
+            with SafeDBSession() as db:
+                workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+                if workflow and workflow.status == "running":
+                    workflow.last_heartbeat_at = datetime.utcnow()
         except Exception as e:
-            logger.debug(f"[WorkflowStatusService] touch_heartbeat error for {workflow_id}: {e}")
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
+            logger.error(f"[WorkflowStatusService] Heartbeat error for workflow {workflow_id}: {e}")
+            raise
     
     def _heartbeat_worker(self, workflow_id: int):
         """Background worker that updates heartbeat timestamp"""

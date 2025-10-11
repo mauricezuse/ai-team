@@ -5,6 +5,7 @@ Handles non-blocking workflow execution with proper status tracking
 import asyncio
 import threading
 import time
+import os
 from typing import Dict, Any, Optional
 from datetime import datetime
 from crewai_app.database import get_db, Workflow, Conversation
@@ -16,6 +17,10 @@ from crewai_app.services.event_stream import post_event
 from crewai_app.database import SessionLocal
 import threading as _threading
 import concurrent.futures
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class WorkflowExecutor:
     """Manages background workflow execution"""
@@ -98,12 +103,28 @@ class WorkflowExecutor:
             # Check if we should use real Jira or mock data
             use_real_jira = True
             try:
-                jira_service = JiraService(use_real=True)
-                story_data = jira_service.get_story(workflow.jira_story_id)
-                if not story_data:
+                # Test if Jira credentials are available
+                jira_token = os.getenv("NEGISHI_JIRA_API_TOKEN")
+                jira_email = os.getenv("NEGISHI_JIRA_EMAIL")
+                jira_base_url = os.getenv("NEGISHI_JIRA_BASE_URL")
+                
+                logger.info(f"[WorkflowExecutor] Jira credentials check:")
+                logger.info(f"[WorkflowExecutor] Token: {'SET' if jira_token else 'NOT SET'}")
+                logger.info(f"[WorkflowExecutor] Email: {'SET' if jira_email else 'NOT SET'}")
+                logger.info(f"[WorkflowExecutor] Base URL: {'SET' if jira_base_url else 'NOT SET'}")
+                
+                if not all([jira_token, jira_email, jira_base_url]):
+                    logger.warning(f"[WorkflowExecutor] Jira credentials not configured, using mock data")
                     use_real_jira = False
+                else:
+                    # Test Jira connection
+                    jira_service = JiraService(use_real=True)
+                    story_data = jira_service.get_story(workflow.jira_story_id)
+                    if not story_data:
+                        logger.warning(f"[WorkflowExecutor] Jira story {workflow.jira_story_id} not found, using mock data")
+                        use_real_jira = False
             except Exception as e:
-                logger.warning(f"[WorkflowExecutor] Jira story {workflow.jira_story_id} not found: {e}")
+                logger.warning(f"[WorkflowExecutor] Jira connection failed: {e}, using mock data")
                 use_real_jira = False
             
             # Create and run the enhanced workflow
@@ -115,7 +136,7 @@ class WorkflowExecutor:
             )
             
             # Run the workflow and get results
-            results = enhanced_workflow.run()
+            results = enhanced_workflow.run(resume=resume)
             
             # Store the workflow log in the database
             if hasattr(enhanced_workflow, 'workflow_log') and enhanced_workflow.workflow_log:
