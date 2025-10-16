@@ -171,3 +171,72 @@ For each branch `B`:
 - Labels: feature, backend, frontend, tests, docs as applicable
 - Reviewers: component owners
 
+
+## Concrete Conflict File Lists (predicted)
+
+These are computed via `git diff --name-only main..branch` intersections.
+
+### MINIONS-2-workflow-status vs MINIONS-3-workflow-ui (38 files)
+- ai_team.db
+- crewai_app/database.py
+- crewai_app/main.py
+- crewai_app/services/workflow_executor.py
+- crewai_app/services/workflow_status_service.py
+- frontend/playwright.config.ts
+- frontend/proxy.conf.json
+- frontend/src/app/core/models/workflow-status.model.ts
+- frontend/src/app/core/services/workflow-status-channel.service.ts
+- frontend/src/app/core/services/workflow.service.ts
+- frontend/src/app/features/workflows/workflow-detail.component.html
+- frontend/src/app/features/workflows/workflow-detail.component.scss
+- frontend/src/app/features/workflows/workflow-detail.component.ts
+- frontend/src/app/features/workflows/workflows-list.component.html
+- frontend/src/app/features/workflows/workflows-list.component.ts
+- nginx.conf
+- playwright.config.ts
+- run_error_display_tests.sh
+- simple-accordion-test.png
+- start_services.sh
+- tests/README.md
+- tests/playwright.config.ts
+- tests/playwright/test_accordion_fixed.spec.ts
+- tests/playwright/test_agent_monitoring.spec.ts
+- tests/playwright/test_comprehensive_database.spec.ts
+- tests/playwright/test_database_integration.spec.ts
+- tests/playwright/test_database_workflows.spec.ts
+- tests/playwright/test_jira_integration.spec.ts
+- tests/playwright/test_llm_calls_display.spec.ts
+- tests/playwright/test_simple_accordion.spec.ts
+- tests/playwright/test_workflow_creation.spec.ts
+- tests/playwright/test_workflow_error_display.spec.ts
+- tests/playwright/test_workflow_execution.spec.ts
+- tests/playwright/test_workflow_status_transitions.spec.ts
+- tests/test_workflow_12_error_simulation.py
+- tests/test_workflow_error_api.py
+- tests/test_workflow_error_display.py
+- tests/test_workflow_status_service.py
+
+### MINIONS-2-workflow-status vs MINIONS-4-optimization (38 files)
+(Same set as above; additional conflicts may arise due to optimizer modules referenced by UI/tests in 4-optimization.)
+
+### MINIONS-3-workflow-ui vs MINIONS-4-optimization (122 files)
+Includes backend services, utils, workflows, and extensive frontend/test overlaps. Key hotspots:
+- Backend: crewai_app/main.py, services/* (conversation_service.py, event_stream.py, workflow_executor.py, workflow_status_service.py), utils/* (logger, codebase_indexer)
+- Workflows: workflows/enhanced_story_workflow.py, story_implementation_workflow.py
+- Frontend: workflows list/detail components, services, proxy config, e2e configs
+- Infra/docs: infra/terraform/*, docs/*
+
+### MINIONS-4-optimization vs MINIONS-4-conversations-optimization (134 files)
+4-conversations-optimization currently mirrors or extends 4-optimization. Expect identical or superset conflicts. Hotspots similar to above plus optimization modules:
+- crewai_app/agents/optimized_agents.py
+- crewai_app/utils/{cost_monitor.py,efficiency_reporting.py,task_complexity_assessor.py}
+- crewai_app/workflows/{streamlined_workflow.py,workflow_orchestrator.py}
+
+## Conflict Resolution Notes Per Hotspot
+- crewai_app/main.py: unify route mounts; preserve SSE/event-stream endpoints and any new optimization routes; ensure Pydantic models consistent.
+- services/workflow_status_service.py: keep latest schema and method names; verify callers in frontend services and tests.
+- services/conversation_service.py & event_stream.py: preserve SSE heartbeat and logging improvements from MINIONS-3; reconcile with any optimization hooks.
+- frontend workflow components: preserve data-testid attributes used in tests; merge template changes carefully.
+- frontend proxy.conf.json/playwright configs: keep latest consistent versions across branches.
+- tests: prefer union of test coverage; update selectors to final UI structure; dedupe overlapping tests.
+
