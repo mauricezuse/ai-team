@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { WorkflowService } from '../../core/services/workflow.service';
 import { WorkflowAdvancedService } from '../../core/services/workflow-advanced.service';
+import { WorkflowStatusChannelService } from '../../core/services/workflow-status-channel.service';
 import { CommonModule } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -11,6 +12,8 @@ import { ChipModule } from 'primeng/chip';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { AccordionModule } from 'primeng/accordion';
+import { Subscription } from 'rxjs';
+import { WorkflowResponse, WorkflowStatusInfo, ConnectionType } from '../../core/models/workflow-status.model';
 
 @Component({
   selector: 'app-workflow-detail',
@@ -20,25 +23,43 @@ import { AccordionModule } from 'primeng/accordion';
   templateUrl: './workflow-detail.component.html',
   styleUrl: './workflow-detail.component.scss'
 })
-export class WorkflowDetailComponent implements OnInit {
-  workflow: any = null;
+export class WorkflowDetailComponent implements OnInit, OnDestroy {
+  workflow: WorkflowResponse | null = null;
   searchTerm: string = '';
   selectedAgent: string = '';
   filteredConversations: any[] = [];
   uniqueAgents: string[] = [];
   agentOptions: { label: string, value: string }[] = [];
+  
+  // Status tracking
+  statusInfo: WorkflowStatusInfo | null = null;
+  connectionType: ConnectionType | undefined;
+  statusSubscription: Subscription | null = null;
+  workflowId: number | null = null;
 
   constructor(
     private route: ActivatedRoute, 
     private workflowService: WorkflowService,
     private advancedService: WorkflowAdvancedService,
+    private statusChannelService: WorkflowStatusChannelService,
     private messageService: MessageService
   ) {}
 
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
+      this.workflowId = parseInt(id);
       this.loadWorkflow(id);
+      this.startStatusTracking();
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.statusSubscription) {
+      this.statusSubscription.unsubscribe();
+    }
+    if (this.workflowId) {
+      this.statusChannelService.stopConnection(this.workflowId);
     }
   }
 
@@ -48,7 +69,9 @@ export class WorkflowDetailComponent implements OnInit {
         this.workflow = workflow;
         // Attach executions list
         this.advancedService.listExecutions(String(workflow.id)).subscribe(execs => {
-          this.workflow.executions = execs || [];
+          if (this.workflow) {
+            (this.workflow as any).executions = execs || [];
+          }
         });
         this.initializeConversations();
       },
@@ -58,6 +81,63 @@ export class WorkflowDetailComponent implements OnInit {
           severity: 'error',
           summary: 'Error',
           detail: 'Failed to load workflow'
+        });
+      }
+    });
+  }
+
+  startStatusTracking() {
+    if (!this.workflowId) return;
+
+    this.statusSubscription = this.statusChannelService.getStatusStream(this.workflowId).subscribe({
+      next: (statusInfo) => {
+        this.statusInfo = statusInfo;
+        this.connectionType = this.statusChannelService.getConnectionType(this.workflowId!);
+        
+        // Update workflow status if it changed
+        if (this.workflow && this.workflow.status !== statusInfo.status) {
+          this.workflow.status = statusInfo.status;
+          this.workflow.isTerminal = statusInfo.isTerminal;
+          this.workflow.heartbeat_stale = statusInfo.heartbeat_stale;
+        }
+
+        // Show warning for stale heartbeat
+        if (statusInfo.heartbeat_stale && statusInfo.status === 'running') {
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Status Warning',
+            detail: 'Workflow heartbeat is stale - process may have stopped unexpectedly'
+          });
+        }
+      },
+      error: (error) => {
+        console.error('Status tracking error:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Status Error',
+          detail: 'Failed to track workflow status'
+        });
+      }
+    });
+  }
+
+  reconcileStatus() {
+    if (!this.workflowId) return;
+
+    this.statusChannelService.reconcileWorkflowStatus(this.workflowId).subscribe({
+      next: (response) => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Status Reconciled',
+          detail: response.message
+        });
+      },
+      error: (error) => {
+        console.error('Reconciliation error:', error);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Reconciliation Failed',
+          detail: 'Failed to reconcile workflow status'
         });
       }
     });
@@ -127,7 +207,7 @@ export class WorkflowDetailComponent implements OnInit {
       detail: 'Workflow execution started...'
     });
 
-    this.workflowService.executeWorkflow(this.workflow.id).subscribe({
+    this.workflowService.executeWorkflow(String(this.workflow.id)).subscribe({
       next: (result) => {
         this.messageService.add({
           severity: 'success',
@@ -137,7 +217,9 @@ export class WorkflowDetailComponent implements OnInit {
         this.refreshWorkflow();
       },
       error: (error) => {
-        this.workflow.status = 'error';
+        if (this.workflow) {
+          this.workflow.status = 'error';
+        }
         this.messageService.add({
           severity: 'error',
           summary: 'Error',

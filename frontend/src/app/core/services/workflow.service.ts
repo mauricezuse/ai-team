@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { WorkflowResponse } from '../models/workflow-status.model';
 
 @Injectable({
   providedIn: 'root'
@@ -26,8 +27,12 @@ export class WorkflowService {
     return this.http.post<any>(`${this.apiUrl}/${id}/execute`, {});
   }
 
-  getWorkflow(id: string): Observable<any> {
-    return this.http.get<any>(`${this.apiUrl}/${id}`);
+  getWorkflow(id: string, etag?: string): Observable<WorkflowResponse> {
+    let headers = new HttpHeaders();
+    if (etag) {
+      headers = headers.set('If-None-Match', etag);
+    }
+    return this.http.get<WorkflowResponse>(`${this.apiUrl}/${id}`, { headers });
   }
 
   executeWorkflow(id: string, storyId?: string): Observable<any> {

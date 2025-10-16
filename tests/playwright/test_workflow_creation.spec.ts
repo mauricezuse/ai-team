@@ -16,7 +16,7 @@ test.describe('Workflow Creation Features', () => {
     }
 
     // Navigate to workflows page (Angular dev server)
-    await page.goto('http://localhost:4002/workflows');
+    await page.goto('/workflows');
     await page.waitForLoadState('networkidle');
   });
 

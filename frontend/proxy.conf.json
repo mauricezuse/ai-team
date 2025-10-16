@@ -1,6 +1,6 @@
 {
   "/api/workflows": {
-    "target": "http://localhost:8000",
+    "target": "http://127.0.0.1:8000",
     "secure": true,
     "changeOrigin": true,
     "logLevel": "debug",
@@ -9,7 +9,7 @@
     }
   },
   "/api/agents": {
-    "target": "http://localhost:8000",
+    "target": "http://127.0.0.1:8000",
     "secure": true,
     "changeOrigin": true,
     "logLevel": "debug",
@@ -18,7 +18,7 @@
     }
   },
   "/api/conversations": {
-    "target": "http://localhost:8000",
+    "target": "http://127.0.0.1:8000",
     "secure": true,
     "changeOrigin": true,
     "logLevel": "debug",
@@ -27,7 +27,7 @@
     }
   },
   "/health": {
-    "target": "http://localhost:8000",
+    "target": "http://127.0.0.1:8000",
     "secure": true,
     "changeOrigin": true,
     "logLevel": "debug"

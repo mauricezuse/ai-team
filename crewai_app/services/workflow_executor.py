@@ -9,6 +9,7 @@ from datetime import datetime
 from crewai_app.database import get_db, Workflow, Conversation
 from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.services.jira_service import JiraService
+from crewai_app.services.workflow_status_service import workflow_status_service
 from crewai_app.utils.logger import logger
 
 class WorkflowExecutor:
@@ -68,9 +69,13 @@ class WorkflowExecutor:
                 logger.error(f"[WorkflowExecutor] Workflow {workflow_id} not found")
                 return
             
-            # Update workflow status
+            # Update workflow status and start heartbeat
             workflow.status = "running"
+            workflow.started_at = datetime.utcnow()
             db.commit()
+            
+            # Start heartbeat tracking
+            workflow_status_service.start_workflow_heartbeat(workflow_id)
             
             # Check if we should use real Jira or mock data
             use_real_jira = True
@@ -161,31 +166,38 @@ class WorkflowExecutor:
                     ex.models = list(models.keys())
                     db.commit()
 
-            # Update workflow status to completed
-            workflow.status = "completed"
-            db.commit()
+            # Finalize workflow status using the status service
+            workflow_status_service.finalize_workflow_status(
+                workflow_id, 
+                "completed", 
+                datetime.utcnow()
+            )
             
             logger.info(f"[WorkflowExecutor] Completed background execution for workflow {workflow_id}")
             
         except Exception as e:
             logger.error(f"[WorkflowExecutor] Background execution failed for workflow {workflow_id}: {e}")
             
-            # Update workflow status to error and mark execution failed if present
+            # Finalize workflow status as failed
             try:
-                db = next(get_db())
-                from crewai_app.database import Workflow, Execution
-                workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
-                if workflow:
-                    workflow.status = "error"
-                    db.commit()
+                workflow_status_service.finalize_workflow_status(
+                    workflow_id,
+                    "failed",
+                    datetime.utcnow(),
+                    str(e)
+                )
+                
+                # Update execution status if present
                 if execution_id:
+                    db = next(get_db())
+                    from crewai_app.database import Execution
                     ex = db.query(Execution).filter(Execution.id == execution_id).first()
                     if ex:
                         ex.status = "failed"
                         ex.finished_at = datetime.utcnow()
                         db.commit()
             except Exception as db_error:
-                logger.error(f"[WorkflowExecutor] Failed to update workflow status: {db_error}")
+                logger.error(f"[WorkflowExecutor] Failed to finalize workflow status: {db_error}")
         
         finally:
             # Remove from running workflows

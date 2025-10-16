@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Body, HTTPException, Depends, Query
+from fastapi import FastAPI, Body, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ import sys
 import os
 import json
 import glob
+import asyncio
 from datetime import datetime
 from crewai_app.workflows.planning_workflow import run_planning_and_design, generate_stories, gap_analysis
 from crewai_app.workflows.implementation_workflow import implement_stories_with_tests
@@ -19,6 +21,7 @@ from crewai_app.database import get_db, init_database, Workflow, Conversation, C
 from crewai_app.database import LLMCall
 from crewai_app.database import Execution
 from crewai_app.utils.feature_flags import FeatureFlags
+from crewai_app.services.workflow_status_service import workflow_status_service
 
 app = FastAPI(title="CrewAI Orchestration Platform")
 flags = FeatureFlags()
@@ -31,7 +34,7 @@ async def startup_event():
 # Add CORS middleware for frontend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200", "http://localhost:3000"],  # Angular dev server
+    allow_origins=["http://localhost:4200", "http://localhost:3000", "http://minions.localhost:4200"],  # Angular dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,6 +61,14 @@ class WorkflowResponse(BaseModel):
     target_branch: str
     conversations: List[Dict] = []
     code_files: List[Dict] = []
+    
+    # Enhanced status fields
+    isTerminal: bool = False
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    error: Optional[str] = None
+    last_heartbeat_at: Optional[datetime] = None
+    heartbeat_stale: bool = False
 
     class Config:
         from_attributes = True
@@ -293,17 +304,36 @@ def get_workflows(db: Session = Depends(get_db)):
             "repository_url": w.repository_url,
             "target_branch": w.target_branch,
             "conversations": [],
-            "code_files": []
+            "code_files": [],
+            # Enhanced status fields
+            "isTerminal": w.status in ["completed", "failed", "cancelled"],
+            "started_at": w.started_at,
+            "finished_at": w.finished_at,
+            "error": w.error,
+            "last_heartbeat_at": w.last_heartbeat_at,
+            "heartbeat_stale": w.last_heartbeat_at and w.status == "running" and 
+                              (datetime.utcnow() - w.last_heartbeat_at).total_seconds() > 300
         }
         for w in workflows
     ]
 
 @app.get("/workflows/{workflow_id:int}", response_model=WorkflowResponse)
-def get_workflow_db(workflow_id: int, db: Session = Depends(get_db)):
+def get_workflow_db(workflow_id: int, db: Session = Depends(get_db), if_none_match: Optional[str] = None):
     """Get a specific workflow with all its data"""
     workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not workflow:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    # Get enhanced status information
+    status_info = workflow_status_service.get_workflow_status_info(workflow_id)
+    
+    # Generate ETag for caching
+    etag = f'"{workflow.updated_at.isoformat()}-{workflow.status}"'
+    
+    # Check if client has current version
+    if if_none_match and if_none_match == etag:
+        from fastapi import Response
+        return Response(status_code=304)
     
     # Get conversations with related data
     conversations = db.query(Conversation).filter(Conversation.workflow_id == workflow_id).all()
@@ -318,7 +348,14 @@ def get_workflow_db(workflow_id: int, db: Session = Depends(get_db)):
         "updated_at": workflow.updated_at,
         "repository_url": workflow.repository_url or "",
         "target_branch": workflow.target_branch or "",
-        "conversations": []
+        "conversations": [],
+        # Enhanced status fields
+        "isTerminal": status_info.get("isTerminal", False),
+        "started_at": workflow.started_at,
+        "finished_at": workflow.finished_at,
+        "error": workflow.error,
+        "last_heartbeat_at": workflow.last_heartbeat_at,
+        "heartbeat_stale": status_info.get("heartbeat_stale", False)
     }
     
     # Map common workflow steps to agent ids for better display when agent is missing
@@ -498,14 +535,102 @@ def execute_workflow_file(workflow_id: str, story_id: Optional[str] = Query(None
 @app.get("/workflows/{workflow_id}/status")
 def get_workflow_status(workflow_id: int):
     """Get the current status of a workflow execution"""
-    from crewai_app.services.workflow_executor import workflow_executor
-    return workflow_executor.get_workflow_status(workflow_id)
+    return workflow_status_service.get_workflow_status_info(workflow_id)
 
 @app.get("/workflows/status/running")
 def get_running_workflows():
     """Get all currently running workflows"""
     from crewai_app.services.workflow_executor import workflow_executor
     return workflow_executor.get_running_workflows()
+
+@app.post("/workflows/{workflow_id}/reconcile")
+def reconcile_workflow_status(workflow_id: int):
+    """Manually reconcile workflow status based on heartbeat"""
+    success = workflow_status_service.reconcile_workflow_status(workflow_id)
+    if success:
+        return {"message": "Workflow status reconciled", "workflow_id": workflow_id}
+    else:
+        raise HTTPException(status_code=404, detail="Workflow not found or reconciliation failed")
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[int, List[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, workflow_id: int):
+        await websocket.accept()
+        if workflow_id not in self.active_connections:
+            self.active_connections[workflow_id] = []
+        self.active_connections[workflow_id].append(websocket)
+
+    def disconnect(self, websocket: WebSocket, workflow_id: int):
+        if workflow_id in self.active_connections:
+            self.active_connections[workflow_id].remove(websocket)
+            if not self.active_connections[workflow_id]:
+                del self.active_connections[workflow_id]
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast_to_workflow(self, message: str, workflow_id: int):
+        if workflow_id in self.active_connections:
+            for connection in self.active_connections[workflow_id]:
+                try:
+                    await connection.send_text(message)
+                except:
+                    # Remove dead connections
+                    self.active_connections[workflow_id].remove(connection)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/workflows/{workflow_id}")
+async def websocket_endpoint(websocket: WebSocket, workflow_id: int):
+    """WebSocket endpoint for real-time workflow status updates"""
+    await manager.connect(websocket, workflow_id)
+    try:
+        # Send initial status
+        status_info = workflow_status_service.get_workflow_status_info(workflow_id)
+        await manager.send_personal_message(json.dumps(status_info), websocket)
+        
+        # Keep connection alive and send periodic updates
+        while True:
+            await asyncio.sleep(5)  # Check every 5 seconds
+            status_info = workflow_status_service.get_workflow_status_info(workflow_id)
+            await manager.send_personal_message(json.dumps(status_info), websocket)
+            
+            # If terminal, send final update and close
+            if status_info.get("isTerminal", False):
+                await manager.send_personal_message(json.dumps(status_info), websocket)
+                break
+                
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, workflow_id)
+
+@app.get("/events/workflows/{workflow_id}")
+async def sse_endpoint(workflow_id: int):
+    """Server-Sent Events endpoint for real-time workflow status updates"""
+    async def event_generator():
+        while True:
+            status_info = workflow_status_service.get_workflow_status_info(workflow_id)
+            yield f"data: {json.dumps(status_info)}\n\n"
+            
+            # If terminal, send final update and stop
+            if status_info.get("isTerminal", False):
+                yield f"data: {json.dumps(status_info)}\n\n"
+                break
+                
+            await asyncio.sleep(5)  # Check every 5 seconds
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control"
+        }
+    )
 
 # --- Executions API ---
 class ExecutionResponse(BaseModel):

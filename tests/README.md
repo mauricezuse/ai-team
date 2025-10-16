@@ -38,7 +38,7 @@ tests/
 
 ### Configuration
 - **Browser**: Chromium (desktop only, mobile disabled)
-- **Base URL**: http://localhost:4001 (Angular dev server)
+- **Base URL**: http://minions.localhost:4200 (Angular dev server)
 - **Timeout**: 30 seconds for API calls, 120 seconds for workflow execution
 - **Parallel**: 4 workers for parallel test execution
 - **Retries**: 2 retries for flaky tests
@@ -96,7 +96,7 @@ export default defineConfig({
   workers: process.env['CI'] ? 1 : 4,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:4001',
+    baseURL: 'http://minions.localhost:4200',
     trace: 'on-first-retry',
   },
   projects: [
@@ -223,7 +223,7 @@ npx playwright test test_negishi_165.spec.ts --debug
 npx playwright test --headed
 
 # Generate test code
-npx playwright codegen localhost:4001
+npx playwright codegen minions.localhost:4200
 ```
 
 ### Test Logs

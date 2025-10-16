@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Code Files Accordion - Fixed', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to workflow detail page
-    await page.goto('http://localhost:4002/workflows/12');
+    await page.goto('//workflows/12');
     
     // Wait for the page to load
     await page.waitForLoadState('networkidle');

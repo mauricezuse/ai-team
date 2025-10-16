@@ -25,6 +25,12 @@ class Workflow(Base):
     repository_url = Column(String)
     target_branch = Column(String, default="main")
     
+    # Enhanced status tracking fields
+    started_at = Column(DateTime)
+    finished_at = Column(DateTime)
+    error = Column(Text)
+    last_heartbeat_at = Column(DateTime)
+    
     # Relationships
     conversations = relationship("Conversation", back_populates="workflow", cascade="all, delete-orphan")
     code_files = relationship("CodeFile", back_populates="workflow", cascade="all, delete-orphan")

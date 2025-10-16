@@ -13,14 +13,25 @@
   <div class="workflow-info">
     <p><strong>Status:</strong> 
       <span [class]="'status-' + workflow.status" data-testid="workflow-status">{{ workflow.status }}</span>
+      <span *ngIf="workflow.isTerminal" class="p-chip p-chip-success">Terminal</span>
+      <span *ngIf="workflow.heartbeat_stale && workflow.status === 'running'" class="p-chip p-chip-warning">Stale Heartbeat</span>
     </p>
     <p><strong>Created:</strong> {{ workflow.created_at | date:'medium' }}</p>
+    <p *ngIf="workflow.started_at"><strong>Started:</strong> {{ workflow.started_at | date:'medium' }}</p>
+    <p *ngIf="workflow.finished_at"><strong>Finished:</strong> {{ workflow.finished_at | date:'medium' }}</p>
+    <p *ngIf="workflow.error"><strong>Error:</strong> <span class="error-message">{{ workflow.error }}</span></p>
+    <p *ngIf="workflow.last_heartbeat_at"><strong>Last Heartbeat:</strong> {{ workflow.last_heartbeat_at | date:'medium' }}</p>
+    <p *ngIf="connectionType"><strong>Connection:</strong> 
+      <span class="p-chip" [class]="'p-chip-' + connectionType">{{ connectionType }}</span>
+    </p>
     <p>
       <a [routerLink]="['/workflows', workflow.id, 'advanced']" class="p-button p-button-outlined" data-testid="advanced-view-link">
         Advanced View
       </a>
       &nbsp;
       <button pButton type="button" label="Start New Execution" icon="pi pi-play" class="p-button-info" (click)="startNewExecution()" data-testid="start-execution"></button>
+      &nbsp;
+      <button pButton type="button" label="Reconcile Status" icon="pi pi-refresh" class="p-button-warning" (click)="reconcileStatus()" data-testid="reconcile-status" *ngIf="workflow.status === 'running'"></button>
     </p>
   </div>
 
@@ -31,7 +42,7 @@
     </div>
   </div>
 
-  <div class="executions" *ngIf="workflow?.executions?.length >= 0">
+  <div class="executions" *ngIf="workflow?.executions && workflow.executions && workflow.executions.length > 0">
     <h3>Executions</h3>
     <table class="p-datatable-table">
       <thead>

@@ -40,6 +40,19 @@
     color: #dc3545;
     font-weight: bold;
   }
+  
+  .error-message {
+    color: #dc3545;
+    background: #f8d7da;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid #f5c6cb;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+  }
 }
 
 .workflow-agents {

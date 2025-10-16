@@ -61,3 +61,8 @@ workflow_results/
 logs/
 repos/
 negishi-freelancing/negishi-freelancing/
+
+# Terraform state
+infra/terraform/.terraform/
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.backup
