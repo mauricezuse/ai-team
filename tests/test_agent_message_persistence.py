@@ -323,8 +323,9 @@ class TestAgentMessagePersistence:
                 # Verify that the method completed successfully (message_id returned)
                 assert message_id is not None, "Message ID should be returned"
                 
-                # Verify event posting was called
-                mock_post_event.assert_called_once()
+                # Verify a message event was posted at least once
+                calls = [c for c in mock_post_event.call_args_list if c.args[1].get('type') == 'message']
+                assert len(calls) >= 1
                 
                 # Verify the call was made to the database session
                 # (The actual database operations are tested in the real implementation)

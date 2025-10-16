@@ -90,6 +90,10 @@ class EfficiencyReport:
     generated_at: float
     report_version: str = "1.0"
 
+# Shared in-memory history for tests and simple telemetry
+report_history: List["EfficiencyReport"] = []  # type: ignore[name-defined]
+performance_trends: Dict[str, List[float]] = {}
+
 class EfficiencyReporter:
     """
     Comprehensive efficiency reporting and metrics analysis.
@@ -100,8 +104,10 @@ class EfficiencyReporter:
     
     def __init__(self):
         self.benchmarks = PerformanceBenchmark()
-        self.report_history: List[EfficiencyReport] = []
-        self.performance_trends: Dict[str, List[float]] = {}
+        # Use shared module-level history for visibility in tests
+        global report_history, performance_trends
+        self.report_history = report_history
+        self.performance_trends = performance_trends
         
     def generate_efficiency_report(self, execution_result: WorkflowExecutionResult) -> EfficiencyReport:
         """

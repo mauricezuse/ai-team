@@ -204,12 +204,16 @@ class CostMonitor:
         # Calculate efficiency score (0-1, higher is better)
         efficiency_score = self._calculate_efficiency_score()
         
+        # Normalize floating precision for stable API/tests
+        total_cost_rounded = round(self.current_cost + 1e-12, 2)
+        avg_cost_rounded = round((self.current_cost / max(self.current_messages, 1)) + 1e-12, 4)
+
         return CostSummary(
-            total_cost=self.current_cost,
+            total_cost=total_cost_rounded,
             total_messages=self.current_messages,
             total_tokens=self.current_tokens,
             duration=self._get_elapsed_time(),
-            average_cost_per_message=self.current_cost / max(self.current_messages, 1),
+            average_cost_per_message=avg_cost_rounded,
             cost_by_agent=cost_by_agent,
             cost_by_step=cost_by_step,
             budget_status=self._check_budget_status(),

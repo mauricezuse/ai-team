@@ -484,10 +484,16 @@ def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(ex)
     # Start background execution
-    from crewai_app.services.workflow_executor import workflow_executor
-    result = workflow_executor.execute_workflow_async(workflow_id, execution_id=ex.id)
-    
-    return {**result, "execution_id": ex.id}
+    try:
+        from crewai_app.services.workflow_executor import workflow_executor
+        result = workflow_executor.execute_workflow_async(workflow_id, execution_id=ex.id)
+        return {**result, "execution_id": ex.id}
+    except Exception as e:
+        # Mark execution as failed
+        ex.status = "failed"
+        ex.finished_at = datetime.utcnow()
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Error executing workflow: {str(e)}")
 
 @app.post("/workflows/{workflow_id:int}/resume")
 def resume_workflow(workflow_id: int, db: Session = Depends(get_db)):

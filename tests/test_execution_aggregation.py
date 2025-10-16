@@ -104,7 +104,7 @@ class TestExecutionAggregation:
         
         assert calls_delta == 5
         assert tokens_delta == 3000
-        assert cost_delta == 1.70
+        assert abs(cost_delta - 1.70) < 1e-9
         assert latency_delta == 600
     
     def test_execution_status_tracking(self, db_session, sample_workflow):
@@ -240,7 +240,7 @@ class TestExecutionComparison:
         
         assert calls_delta == 5
         assert tokens_delta == 3000
-        assert cost_delta == 1.70
+        assert abs(cost_delta - 1.70) < 1e-9
         assert latency_delta == 600
     
     def test_compare_executions_performance_improvement(self, db_session):
