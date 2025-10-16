@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { WorkflowService } from '../../core/services/workflow.service';
 import { WorkflowAdvancedService } from '../../core/services/workflow-advanced.service';
@@ -12,16 +12,19 @@ import { ChipModule } from 'primeng/chip';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { AccordionModule } from 'primeng/accordion';
+import { TabViewModule } from 'primeng/tabview';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 import { Subscription } from 'rxjs';
 import { WorkflowResponse, WorkflowStatusInfo, ConnectionType } from '../../core/models/workflow-status.model';
 
 @Component({
   selector: 'app-workflow-detail',
   standalone: true,
-  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule, RouterModule],
+  imports: [CommonModule, ButtonModule, InputTextModule, DropdownModule, FormsModule, ChipModule, ToastModule, AccordionModule, TabViewModule, RouterModule, ScrollingModule],
   providers: [MessageService],
   templateUrl: './workflow-detail.component.html',
-  styleUrl: './workflow-detail.component.scss'
+  styleUrl: './workflow-detail.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WorkflowDetailComponent implements OnInit, OnDestroy {
   workflow: WorkflowResponse | null = null;
@@ -36,13 +39,44 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   connectionType: ConnectionType | undefined;
   statusSubscription: Subscription | null = null;
   workflowId: number | null = null;
+  
+  // UI state
+  activeTabIndex: number = 2; // default to Conversations tab to preserve existing tests expecting conversations visible
+
+  // Aggregated insights
+  allCodeFiles: any[] = [];
+  prInfo: { url?: string; skippedReason?: string } = {};
+  prChecks: any[] = [];
+  artifacts: any[] = [];
+  diffs: any[] = [];
+  llmConversations: Array<{ id: number; label: string; calls: any[] }> = [];
+  llmSelectedConvId: number | null = null;
+  escalationsList: Array<{ from_agent: string; to_agent: string; reason: string; status: string }> = [];
+  // Executions compare UI state
+  execA: number | null = null;
+  execB: number | null = null;
+  execCompareResult: any | null = null;
+  // Live event stream
+  liveLogs: Array<{ level?: string; message?: string; timestamp?: string }> = [];
+  liveConversations: any[] = [];
+  private streamCloser: { close: () => void } | null = null;
+  showLiveStream: boolean = true;
+
+  // Loading flags
+  isLoadingWorkflow: boolean = true;
+  isLoadingExecutions: boolean = true;
+  isLoadingPR: boolean = true;
+  isLoadingChecks: boolean = true;
+  isLoadingDiffs: boolean = true;
+  isLoadingArtifacts: boolean = true;
 
   constructor(
     private route: ActivatedRoute, 
     private workflowService: WorkflowService,
     private advancedService: WorkflowAdvancedService,
     private statusChannelService: WorkflowStatusChannelService,
-    private messageService: MessageService
+    private messageService: MessageService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -51,7 +85,47 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
       this.workflowId = parseInt(id);
       this.loadWorkflow(id);
       this.startStatusTracking();
+      this.startEventStream();
     }
+  }
+
+  refreshPrChecks() {
+    if (!this.workflowId) return;
+    this.advancedService.refreshPrChecks(String(this.workflowId)).subscribe({
+      next: () => {
+        this.advancedService.listPrChecks(String(this.workflowId), { page: 1, page_size: 50 }).subscribe(checks => {
+          this.prChecks = checks || [];
+          this.messageService.add({ severity: 'success', summary: 'Refreshed', detail: 'PR & Checks updated' });
+        });
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to refresh PR & Checks' })
+    });
+  }
+
+  refreshDiffs() {
+    if (!this.workflowId) return;
+    this.advancedService.refreshDiffs(String(this.workflowId)).subscribe({
+      next: () => {
+        this.advancedService.listDiffs(String(this.workflowId), { page: 1, page_size: 100 }).subscribe(diffs => {
+          this.diffs = diffs || [];
+          this.messageService.add({ severity: 'success', summary: 'Refreshed', detail: 'Diffs updated' });
+        });
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to refresh diffs' })
+    });
+  }
+
+  refreshArtifacts() {
+    if (!this.workflowId) return;
+    this.advancedService.refreshArtifacts(String(this.workflowId)).subscribe({
+      next: () => {
+        this.advancedService.listArtifacts(String(this.workflowId), { page: 1, page_size: 50 }).subscribe(arts => {
+          this.artifacts = arts || [];
+          this.messageService.add({ severity: 'success', summary: 'Refreshed', detail: 'Artifacts updated' });
+        });
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to refresh artifacts' })
+    });
   }
 
   ngOnDestroy() {
@@ -61,19 +135,60 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     if (this.workflowId) {
       this.statusChannelService.stopConnection(this.workflowId);
     }
+    if (this.streamCloser) {
+      this.streamCloser.close();
+      this.streamCloser = null;
+    }
   }
 
   loadWorkflow(id: string) {
+    this.isLoadingWorkflow = true;
+    this.cdr.markForCheck();
     this.workflowService.getWorkflow(id).subscribe({
       next: (workflow) => {
         this.workflow = workflow;
+        this.isLoadingWorkflow = false;
         // Attach executions list
         this.advancedService.listExecutions(String(workflow.id)).subscribe(execs => {
           if (this.workflow) {
             (this.workflow as any).executions = execs || [];
           }
+          this.isLoadingExecutions = false;
+          this.cdr.markForCheck();
         });
         this.initializeConversations();
+
+        // Compute aggregated views
+        this.computeAggregates();
+
+        // Fetch PR summary and checks
+        this.advancedService.getWorkflowPr(String(workflow.id)).subscribe({
+          next: (pr) => {
+            if (pr && pr.url) {
+              this.prInfo = { url: pr.url };
+            }
+            this.isLoadingPR = false;
+            this.cdr.markForCheck();
+          },
+          error: () => { this.isLoadingPR = false; this.cdr.markForCheck(); }
+        });
+        this.advancedService.listPrChecks(String(workflow.id), { page: 1, page_size: 50 }).subscribe({
+          next: (checks) => { this.prChecks = checks || []; this.isLoadingChecks = false; this.cdr.markForCheck(); },
+          error: () => { this.prChecks = []; this.isLoadingChecks = false; this.cdr.markForCheck(); }
+        });
+
+        // Fetch diffs meta
+        this.advancedService.listDiffs(String(workflow.id), { page: 1, page_size: 100 }).subscribe({
+          next: (diffs) => { this.diffs = diffs || []; this.isLoadingDiffs = false; this.cdr.markForCheck(); },
+          error: () => { this.diffs = []; this.isLoadingDiffs = false; this.cdr.markForCheck(); }
+        });
+
+        // Fetch artifacts
+        this.advancedService.listArtifacts(String(workflow.id), { page: 1, page_size: 50 }).subscribe({
+          next: (arts) => { this.artifacts = arts || []; this.isLoadingArtifacts = false; this.cdr.markForCheck(); },
+          error: () => { this.artifacts = []; this.isLoadingArtifacts = false; this.cdr.markForCheck(); }
+        });
+        this.cdr.markForCheck();
       },
       error: (error) => {
         console.error('Error loading workflow:', error);
@@ -82,6 +197,8 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
           summary: 'Error',
           detail: 'Failed to load workflow'
         });
+        this.isLoadingWorkflow = false;
+        this.cdr.markForCheck();
       }
     });
   }
@@ -94,11 +211,27 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
         this.statusInfo = statusInfo;
         this.connectionType = this.statusChannelService.getConnectionType(this.workflowId!);
         
-        // Update workflow status if it changed
-        if (this.workflow && this.workflow.status !== statusInfo.status) {
+        // Ensure the workflow object reflects latest status details
+        if (this.workflow) {
+          // Always sync core status fields
           this.workflow.status = statusInfo.status;
           this.workflow.isTerminal = statusInfo.isTerminal;
           this.workflow.heartbeat_stale = statusInfo.heartbeat_stale;
+
+          // Propagate error and timestamps if provided by the status stream
+          if (typeof (statusInfo as any).error !== 'undefined') {
+            (this.workflow as any).error = (statusInfo as any).error;
+          }
+          if (typeof (statusInfo as any).started_at !== 'undefined') {
+            (this.workflow as any).started_at = (statusInfo as any).started_at as any;
+          }
+          if (typeof (statusInfo as any).finished_at !== 'undefined') {
+            (this.workflow as any).finished_at = (statusInfo as any).finished_at as any;
+          }
+          if (typeof (statusInfo as any).last_heartbeat_at !== 'undefined') {
+            (this.workflow as any).last_heartbeat_at = (statusInfo as any).last_heartbeat_at as any;
+          }
+          this.cdr.markForCheck();
         }
 
         // Show warning for stale heartbeat
@@ -173,14 +306,84 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     }
   }
 
+  private computeAggregates() {
+    const wf: any = this.workflow;
+    if (!wf) return;
+    // Aggregate code files
+    const files: any[] = [];
+    (wf.conversations || []).forEach((c: any) => {
+      (c.code_files || []).forEach((f: any) => files.push(f));
+    });
+    // de-duplicate by path/name string rep
+    const seen = new Set<string>();
+    this.allCodeFiles = files.filter(f => {
+      const key = typeof f === 'string' ? f : (f.file_path || f.filename || JSON.stringify(f));
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // PR info
+    let prUrl: string | undefined;
+    let skippedReason: string | undefined;
+    (wf.conversations || []).forEach((c: any) => {
+      if (c.step === 'pr_created' && c.pr && c.pr.url) {
+        prUrl = c.pr.url;
+      }
+      if (c.step === 'pr_skipped' && c.reason) {
+        skippedReason = c.reason;
+      }
+    });
+    this.prInfo = { url: prUrl, skippedReason };
+
+    // LLM conversations list
+    this.llmConversations = (wf.conversations || [])
+      .filter((c: any) => c.llm_calls && c.llm_calls.length > 0)
+      .map((c: any) => ({ id: c.id, label: `${c.agent || 'Agent'} - ${c.step || 'Step'}`, calls: c.llm_calls }));
+    this.llmSelectedConvId = this.llmConversations.length > 0 ? this.llmConversations[0].id : null;
+
+    // Escalations aggregate
+    const escalations: any[] = [];
+    (wf.conversations || []).forEach((c: any) => {
+      (c.escalations || []).forEach((e: any) => escalations.push(e));
+    });
+    this.escalationsList = escalations;
+  }
+
+  get selectedLlmCalls(): any[] {
+    if (!this.llmSelectedConvId) return [];
+    const found = this.llmConversations.find(x => x.id === this.llmSelectedConvId);
+    return found ? (found.calls || []) : [];
+  }
+
+  compareExecutions() {
+    if (!this.workflowId || !this.execA || !this.execB) {
+      this.execCompareResult = null;
+      return;
+    }
+    this.advancedService.compareExecutions(String(this.workflowId), this.execA, this.execB).subscribe({
+      next: (res) => {
+        this.execCompareResult = res;
+      },
+      error: () => {
+        this.execCompareResult = { error: 'Failed to compare executions' };
+      }
+    });
+  }
+
   filterConversations() {
     if (!this.workflow?.conversations) return;
 
     this.filteredConversations = this.workflow.conversations.filter((conversation: any) => {
+      // Search in messages content, step name, and agent name
+      const searchInMessages = conversation.messages?.some((msg: any) => 
+        msg.content?.toLowerCase().includes(this.searchTerm.toLowerCase())
+      ) || false;
+      
       const matchesSearch = !this.searchTerm || 
-        conversation.details?.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        conversation.output?.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
-        conversation.step?.toLowerCase().includes(this.searchTerm.toLowerCase());
+        conversation.step?.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+        conversation.agent?.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+        searchInMessages;
       
       const matchesAgent = !this.selectedAgent || conversation.agent === this.selectedAgent;
       
@@ -197,37 +400,7 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     conversation.expanded = !conversation.expanded;
   }
 
-  executeWorkflow() {
-    if (!this.workflow) return;
-
-    this.workflow.status = 'running';
-    this.messageService.add({
-      severity: 'info',
-      summary: 'Executing',
-      detail: 'Workflow execution started...'
-    });
-
-    this.workflowService.executeWorkflow(String(this.workflow.id)).subscribe({
-      next: (result) => {
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Success',
-          detail: 'Workflow executed successfully'
-        });
-        this.refreshWorkflow();
-      },
-      error: (error) => {
-        if (this.workflow) {
-          this.workflow.status = 'error';
-        }
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Error executing workflow'
-        });
-      }
-    });
-  }
+  // Removed legacy executeWorkflow() in favor of startNewExecution()
 
   startNewExecution() {
     if (!this.workflow) return;
@@ -241,12 +414,51 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
     });
   }
 
+  resumeWorkflow() {
+    if (!this.workflow) return;
+    this.messageService.add({ severity: 'info', summary: 'Resuming', detail: 'Resuming workflow from last checkpoint...' });
+    this.workflowService.resumeWorkflow(this.workflow.id).subscribe({
+      next: (result) => {
+        this.messageService.add({ severity: 'success', summary: 'Workflow resumed', detail: `Resumed with execution #${result.execution_id}` });
+        this.refreshWorkflow();
+      },
+      error: () => this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to resume workflow' })
+    });
+  }
+
   refreshWorkflow() {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.loadWorkflow(id);
     }
   }
+
+  private startEventStream() {
+    if (!this.workflowId) return;
+    this.streamCloser = this.statusChannelService.connectEventStream(this.workflowId, (evt) => {
+      if (!evt || !evt.type) return;
+      if (evt.type === 'log') {
+        this.liveLogs.unshift({ level: evt.level || 'info', message: evt.message || '', timestamp: evt.timestamp });
+        this.liveLogs = this.liveLogs.slice(0, 200);
+        this.cdr.markForCheck();
+      } else if (evt.type === 'conversation' && evt.conversation) {
+        this.liveConversations.unshift(evt.conversation);
+        this.filteredConversations = [evt.conversation, ...(this.filteredConversations || [])];
+        this.cdr.markForCheck();
+      } else if (evt.type === 'status' && this.workflow) {
+        this.workflow.status = evt.status;
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  // trackBy functions for performance
+  trackByConversation = (_: number, c: any) => c?.id || c?.timestamp || _;
+  trackByLog = (_: number, l: any) => l?.timestamp || _;
+  trackByArtifact = (_: number, a: any) => a?.id || _;
+  trackByDiff = (_: number, d: any) => d?.path || _;
+  trackByCheck = (_: number, c: any) => c?.id || c?.name || _;
+  trackByExec = (_: number, e: any) => e?.id || _;
 
   getFileUrl(file: any): string {
     // Handle both string and object file formats

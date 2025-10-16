@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Body, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Body, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -18,10 +18,15 @@ from crewai_app.workflows.story_implementation_workflow import StoryImplementati
 from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.config import settings
 from crewai_app.database import get_db, init_database, Workflow, Conversation, CodeFile, Escalation, Collaboration
-from crewai_app.database import LLMCall
+from crewai_app.database import LLMCall, Message
 from crewai_app.database import Execution
+from crewai_app.database import PullRequest, CheckRun, Artifact, Diff
+from crewai_app.services.background_jobs import refresh_pr_and_checks, refresh_diffs, refresh_artifacts
+from crewai_app.services.event_stream import try_get_event
 from crewai_app.utils.feature_flags import FeatureFlags
 from crewai_app.services.workflow_status_service import workflow_status_service
+import hmac
+import hashlib
 
 app = FastAPI(title="CrewAI Orchestration Platform")
 flags = FeatureFlags()
@@ -389,6 +394,8 @@ def get_workflow_db(workflow_id: int, db: Session = Depends(get_db), if_none_mat
         # Get escalations and collaborations
         escalations = db.query(Escalation).filter(Escalation.conversation_id == conv.id).all()
         collaborations = db.query(Collaboration).filter(Collaboration.conversation_id == conv.id).all()
+        # Get messages for this conversation
+        messages = db.query(Message).filter(Message.conversation_id == conv.id).order_by(Message.id).all()
         
         # Infer agent if missing
         inferred_agent = conv.agent or step_to_agent.get((conv.step or "").strip().lower(), "")
@@ -419,6 +426,7 @@ def get_workflow_db(workflow_id: int, db: Session = Depends(get_db), if_none_mat
             "escalations": [{"from_agent": e.from_agent, "to_agent": e.to_agent, "reason": e.reason, "status": e.status} for e in escalations],
             "collaborations": [{"from_agent": c.from_agent, "to_agent": c.to_agent, "request_type": c.request_type, "status": c.status} for c in collaborations],
             "llm_calls": llm_calls_data,
+            "messages": [{"id": m.id, "role": m.role, "content": m.content, "artifacts": m.artifacts or [], "message_metadata": m.message_metadata or {}} for m in messages],
             "total_tokens_used": conv.total_tokens_used or 0,
             "total_cost": conv.total_cost or "0.00"
         }
@@ -426,45 +434,7 @@ def get_workflow_db(workflow_id: int, db: Session = Depends(get_db), if_none_mat
     
     return workflow_data
 
-@app.get("/workflows/{workflow_id}")
-def get_workflow_file(workflow_id: str):
-    """Legacy file-based workflow detail used in tests."""
-    try:
-        results_dir = "workflow_results"
-        if not os.path.exists(results_dir):
-            raise HTTPException(status_code=404, detail="Workflow not found")
-        path = os.path.join(results_dir, f"{workflow_id}_checkpoint.json")
-        if not os.path.exists(path):
-            raise HTTPException(status_code=404, detail="Workflow not found")
-        with open(path, "r") as f:
-            data = json.load(f)
-        # Build minimal response structure expected by tests
-        workflow_data = {
-            "id": workflow_id,
-            "name": (workflow_id.replace("_", " ").title() if workflow_id else "Workflow"),
-            "status": "completed",
-            "conversations": [],
-        }
-        log = data.get("workflow_log", [])
-        for entry in log:
-            workflow_data["conversations"].append({
-                "step": entry.get("step", ""),
-                "agent": entry.get("agent", ""),
-                "timestamp": entry.get("timestamp", ""),
-                "status": entry.get("status", ""),
-                "details": entry.get("details", ""),
-                "output": entry.get("output", ""),
-                "code_files": entry.get("code_files", []),
-                "escalations": entry.get("escalations", []),
-                "collaborations": entry.get("collaborations", []),
-            })
-        return workflow_data
-    except IOError:
-        raise HTTPException(status_code=500, detail="Error reading workflow file")
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise
-        raise HTTPException(status_code=500, detail=f"Error reading workflow: {e}")
+######## Removed legacy GET /workflows/{workflow_id} (string id) endpoint
 
 @app.post("/workflows", response_model=WorkflowResponse)
 def create_workflow(workflow_data: WorkflowCreate, db: Session = Depends(get_db)):
@@ -507,30 +477,44 @@ def execute_workflow(workflow_id: int, db: Session = Depends(get_db)):
             "status": "running"
         }
     
+    # Ensure an execution row exists for observability
+    ex = Execution(workflow_id=workflow_id, status="running", started_at=datetime.utcnow())
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
     # Start background execution
     from crewai_app.services.workflow_executor import workflow_executor
-    result = workflow_executor.execute_workflow_async(workflow_id)
+    result = workflow_executor.execute_workflow_async(workflow_id, execution_id=ex.id)
     
-    return result
+    return {**result, "execution_id": ex.id}
 
-@app.post("/workflows/{workflow_id}/execute")
-def execute_workflow_file(workflow_id: str, story_id: Optional[str] = Query(None)):
-    """Legacy execute endpoint for string workflow ids used in tests."""
-    try:
-        sid = story_id or (workflow_id.split("_")[-1] if workflow_id else None)
-        wf = EnhancedStoryWorkflow(story_id=sid, use_real_jira=True, use_real_github=True, codebase_root=None, user_intervention_mode=False)
-        results = wf.run()
-        return {
-            "message": "Workflow executed successfully",
-            "workflow_id": workflow_id,
-            "story_id": sid,
-            "status": "completed",
-            "results": results,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error executing workflow")
+@app.post("/workflows/{workflow_id:int}/resume")
+def resume_workflow(workflow_id: int, db: Session = Depends(get_db)):
+    """Resume a failed or interrupted workflow from the last checkpoint"""
+    workflow = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    # Only allow resuming failed or completed workflows
+    if workflow.status == "running":
+        raise HTTPException(status_code=400, detail="Workflow is already running")
+    
+    if workflow.status not in ["failed", "completed"]:
+        raise HTTPException(status_code=400, detail="Workflow must be failed or completed to resume")
+    
+    # Create new execution for resume
+    ex = Execution(workflow_id=workflow_id, status="running", started_at=datetime.utcnow())
+    db.add(ex)
+    db.commit()
+    db.refresh(ex)
+    
+    # Start background execution with resume flag
+    from crewai_app.services.workflow_executor import workflow_executor
+    result = workflow_executor.execute_workflow_async(workflow_id, execution_id=ex.id, resume=True)
+    
+    return {**result, "execution_id": ex.id, "resumed": True}
+
+######## Removed legacy POST /workflows/{workflow_id}/execute (string id) endpoint
 
 @app.get("/workflows/{workflow_id}/status")
 def get_workflow_status(workflow_id: int):
@@ -632,6 +616,41 @@ async def sse_endpoint(workflow_id: int):
         }
     )
 
+# New event stream endpoint for logs and real-time conversation events
+@app.get("/events/workflows/{workflow_id}/stream")
+async def sse_event_stream(workflow_id: int):
+    async def event_generator():
+        ping_interval_seconds = 10
+        last_ping = asyncio.get_event_loop().time()
+        while True:
+            try:
+                evt = try_get_event(workflow_id, timeout_seconds=0.25)
+                if evt is not None:
+                    yield f"data: {json.dumps(evt)}\n\n"
+                # Periodic keep-alive comment to prevent intermediaries from closing idle connections
+                now = asyncio.get_event_loop().time()
+                if now - last_ping >= ping_interval_seconds:
+                    last_ping = now
+                    # Comment line as SSE heartbeat; safe to ignore client-side
+                    yield f": ping\n\n"
+                await asyncio.sleep(0.25)
+            except Exception as e:
+                # Emit an error event then break; client should reconnect
+                err_evt = {"type": "error", "message": f"stream error: {str(e)}"}
+                yield f"data: {json.dumps(err_evt)}\n\n"
+                break
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control"
+        }
+    )
+
 # --- Executions API ---
 class ExecutionResponse(BaseModel):
     id: int
@@ -645,6 +664,49 @@ class ExecutionResponse(BaseModel):
     avg_latency_ms: int = 0
     models: List[str] = []
     meta: Dict[str, Any] = {}
+
+    class Config:
+        from_attributes = True
+
+class PullRequestResponse(BaseModel):
+    pr_number: Optional[int] = None
+    url: Optional[str] = None
+    title: Optional[str] = None
+    state: Optional[str] = None
+    head_branch: Optional[str] = None
+    base_branch: Optional[str] = None
+    head_sha: Optional[str] = None
+    created_at: Optional[datetime] = None
+    merged_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class CheckRunResponse(BaseModel):
+    id: int
+    name: Optional[str] = None
+    status: Optional[str] = None
+    conclusion: Optional[str] = None
+    html_url: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class DiffResponse(BaseModel):
+    path: str
+    patch: str
+    head_sha: Optional[str] = None
+    base_sha: Optional[str] = None
+
+class ArtifactResponse(BaseModel):
+    id: int
+    kind: str
+    uri: str
+    checksum: Optional[str] = None
+    size_bytes: Optional[int] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -771,13 +833,20 @@ def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):
         # Get workflow name for response
         workflow_name = workflow.name
         
-        # Delete related data (cascading should handle this, but let's be explicit)
+        # Delete related data in the correct order to avoid foreign key constraints
         # Get conversation IDs first
         conversation_ids = db.query(Conversation.id).filter(Conversation.workflow_id == workflow_id).all()
         conversation_ids = [conv_id[0] for conv_id in conversation_ids]
         
-        # Delete escalations and collaborations for these conversations
+        # Delete in order: LLM calls -> Messages -> Escalations -> Collaborations -> Conversations
         if conversation_ids:
+            # Delete LLM calls first (they reference conversations)
+            db.query(LLMCall).filter(LLMCall.conversation_id.in_(conversation_ids)).delete()
+            
+            # Delete messages (they reference conversations)
+            db.query(Message).filter(Message.conversation_id.in_(conversation_ids)).delete()
+            
+            # Delete escalations and collaborations for these conversations
             db.query(Escalation).filter(Escalation.conversation_id.in_(conversation_ids)).delete()
             db.query(Collaboration).filter(Collaboration.conversation_id.in_(conversation_ids)).delete()
         
@@ -838,9 +907,185 @@ def list_endpoints():
             {"path": "/workflows/{workflow_id}/execute", "method": "POST", "description": "Execute a workflow."},
             {"path": "/agents", "method": "GET", "description": "List all agents."},
             {"path": "/agents/{agent_id}", "method": "GET", "description": "Get agent details."},
-            {"path": "/health", "method": "GET", "description": "Health check."}
+            {"path": "/health", "method": "GET", "description": "Health check."},
+            {"path": "/workflows/{workflow_id}/pr", "method": "GET", "description": "Get PR summary for workflow."},
+            {"path": "/workflows/{workflow_id}/pr/checks", "method": "GET", "description": "List PR checks for workflow."},
+            {"path": "/workflows/{workflow_id}/diffs", "method": "GET", "description": "List diffs for workflow."},
+            {"path": "/workflows/{workflow_id}/artifacts", "method": "GET", "description": "List artifacts for workflow."}
         ]
     }
+
+# --- PR & Checks API ---
+@app.get("/workflows/{workflow_id:int}/pr", response_model=PullRequestResponse)
+def get_workflow_pr(workflow_id: int, db: Session = Depends(get_db)):
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    pr = db.query(PullRequest).filter(PullRequest.workflow_id == workflow_id).order_by(PullRequest.created_at.desc()).first()
+    if pr:
+        return PullRequestResponse(
+            pr_number=pr.pr_number,
+            url=pr.url,
+            title=pr.title,
+            state=pr.state,
+            head_branch=pr.head_branch,
+            base_branch=pr.base_branch,
+            head_sha=pr.head_sha,
+            created_at=pr.created_at,
+            merged_at=pr.merged_at,
+        )
+    # Fallback from conversation step if available
+    conv = db.query(Conversation).filter(Conversation.workflow_id == workflow_id, Conversation.step == 'pr_created').order_by(Conversation.timestamp.desc()).first()
+    if conv:
+        url = None
+        try:
+            if isinstance(conv.output, str) and conv.output.startswith('{'):
+                obj = json.loads(conv.output)
+                url = obj.get('pr', {}).get('url') or obj.get('url')
+        except Exception:
+            pass
+        return PullRequestResponse(url=url)
+    # Do not 404; return empty payload so frontend can handle gracefully
+    return PullRequestResponse()
+
+@app.get("/workflows/{workflow_id:int}/pr/checks", response_model=List[CheckRunResponse])
+def list_pr_checks(workflow_id: int, db: Session = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=200)):
+    pr = db.query(PullRequest).filter(PullRequest.workflow_id == workflow_id).order_by(PullRequest.created_at.desc()).first()
+    if not pr:
+        return []
+    q = db.query(CheckRun).filter(CheckRun.workflow_id == workflow_id, CheckRun.pr_id == pr.id)
+    items = q.order_by(CheckRun.started_at.desc().nullslast()).offset((page - 1) * page_size).limit(page_size).all()
+    return items
+
+# --- GitHub Webhook Ingestion ---
+def _verify_github_signature(secret: Optional[str], body: bytes, signature_header: Optional[str]) -> bool:
+    if not secret:
+        return True
+    if not signature_header or not signature_header.startswith('sha256='):
+        return False
+    sig = signature_header.split('=')[1]
+    mac = hmac.new(secret.encode('utf-8'), msg=body, digestmod=hashlib.sha256)
+    expected = mac.hexdigest()
+    # Use hmac.compare_digest to avoid timing attacks
+    return hmac.compare_digest(expected, sig)
+
+@app.post("/webhooks/github")
+async def github_webhook(request: Request, db: Session = Depends(get_db)):
+    raw_body = await request.body()
+    signature = request.headers.get('X-Hub-Signature-256')
+    event = request.headers.get('X-GitHub-Event', '').strip()
+    if not _verify_github_signature(settings.github_webhook_secret, raw_body, signature):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    # Handle events
+    if event == 'pull_request':
+        action = payload.get('action')
+        pr = payload.get('pull_request') or {}
+        repo_html = (payload.get('repository') or {}).get('html_url')
+        if pr:
+            number = pr.get('number')
+            url = pr.get('html_url')
+            title = pr.get('title')
+            state = pr.get('state')
+            head_branch = (pr.get('head') or {}).get('ref')
+            base_branch = (pr.get('base') or {}).get('ref')
+            head_sha = (pr.get('head') or {}).get('sha')
+
+            # Best-effort mapping: find workflow by jira_story_id in title if present
+            workflow = None
+            if title:
+                wf = db.query(Workflow).filter(Workflow.name.like(f"%{title.split(':')[0]}%"))
+                workflow = wf.first()
+            # Fallback: latest workflow row
+            workflow = workflow or db.query(Workflow).order_by(Workflow.created_at.desc()).first()
+            if workflow:
+                pr_row = db.query(PullRequest).filter(PullRequest.workflow_id == workflow.id, PullRequest.pr_number == number).first()
+                if not pr_row:
+                    pr_row = PullRequest(workflow_id=workflow.id, pr_number=number)
+                pr_row.url = url
+                pr_row.title = title
+                pr_row.state = state
+                pr_row.head_branch = head_branch
+                pr_row.base_branch = base_branch
+                pr_row.head_sha = head_sha
+                pr_row.created_at = pr.get('created_at') or pr_row.created_at
+                pr_row.merged_at = pr.get('merged_at')
+                db.add(pr_row)
+                db.commit()
+        return {"status": "ok"}
+
+    if event in ('check_run', 'check_suite'):
+        # Normalize to a list of check runs
+        runs = []
+        if event == 'check_run':
+            cr = payload.get('check_run') or {}
+            if cr:
+                runs = [cr]
+        else:
+            suite = payload.get('check_suite') or {}
+            runs = suite.get('check_runs', []) if isinstance(suite, dict) else []
+
+        for r in runs:
+            prs = r.get('pull_requests') or []
+            # For each referenced PR, update CheckRun rows
+            for pr_ref in prs:
+                pr_number = pr_ref.get('number')
+                pr_row = db.query(PullRequest).filter(PullRequest.pr_number == pr_number).order_by(PullRequest.created_at.desc()).first()
+                if not pr_row:
+                    continue
+                row = CheckRun(
+                    workflow_id=pr_row.workflow_id,
+                    pr_id=pr_row.id,
+                    name=r.get('name'),
+                    status=r.get('status'),
+                    conclusion=r.get('conclusion'),
+                    html_url=r.get('html_url') or r.get('details_url'),
+                    started_at=r.get('started_at'),
+                    completed_at=r.get('completed_at')
+                )
+                db.add(row)
+        db.commit()
+        return {"status": "ok"}
+
+    # Other events not handled explicitly
+    return {"status": "ignored", "event": event}
+# --- Diffs API ---
+@app.get("/workflows/{workflow_id:int}/diffs", response_model=List[DiffResponse])
+def list_diffs(workflow_id: int, db: Session = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200), path: Optional[str] = Query(None)):
+    q = db.query(Diff).filter(Diff.workflow_id == workflow_id)
+    if path:
+        q = q.filter(Diff.path.like(f"%{path}%"))
+    items = q.order_by(Diff.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return [DiffResponse(path=i.path, patch=i.patch or "", head_sha=i.head_sha, base_sha=i.base_sha) for i in items]
+
+# --- Artifacts API ---
+@app.get("/workflows/{workflow_id:int}/artifacts", response_model=List[ArtifactResponse])
+def list_artifacts(workflow_id: int, db: Session = Depends(get_db), page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200), kind: Optional[str] = Query(None)):
+    q = db.query(Artifact).filter(Artifact.workflow_id == workflow_id)
+    if kind:
+        q = q.filter(Artifact.kind == kind)
+    items = q.order_by(Artifact.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return items
+
+# --- Refresh Job Enqueue Endpoints ---
+@app.post("/workflows/{workflow_id:int}/pr/refresh")
+def refresh_pr_checks_endpoint(workflow_id: int, tasks: BackgroundTasks):
+    tasks.add_task(refresh_pr_and_checks, workflow_id)
+    return {"message": "PR and checks refresh enqueued"}
+
+@app.post("/workflows/{workflow_id:int}/diffs/refresh")
+def refresh_diffs_endpoint(workflow_id: int, tasks: BackgroundTasks):
+    tasks.add_task(refresh_diffs, workflow_id)
+    return {"message": "Diffs refresh enqueued"}
+
+@app.post("/workflows/{workflow_id:int}/artifacts/refresh")
+def refresh_artifacts_endpoint(workflow_id: int, tasks: BackgroundTasks):
+    tasks.add_task(refresh_artifacts, workflow_id)
+    return {"message": "Artifacts refresh enqueued"}
 
 # --- Models for API ---
 class PlanningInput(BaseModel):

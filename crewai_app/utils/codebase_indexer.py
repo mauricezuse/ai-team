@@ -66,6 +66,13 @@ EMBEDDING_CACHE_FILE = 'embedding_cache.json'
 # --- Plugin system for file selection/indexing ---
 PLUGIN_REGISTRY: dict[str, Callable] = {}
 
+# --- Codebase root resolution ---
+CODEBASE_ROOT_DIR: str = os.getcwd()
+
+def set_codebase_root(root_dir: str) -> None:
+    global CODEBASE_ROOT_DIR
+    CODEBASE_ROOT_DIR = root_dir or CODEBASE_ROOT_DIR
+
 def register_plugin(name: str):
     def decorator(func):
         PLUGIN_REGISTRY[name] = func
@@ -163,6 +170,10 @@ def summarize_file_content(content: str, max_length: int = 500) -> str:
 # --- Async File Indexing ---
 async def async_parse_file(file_path: str, rel_path: str) -> Optional[dict]:
     try:
+        if not os.path.exists(file_path):
+            abs_path = os.path.abspath(file_path)
+            logging.error(f"async_parse_file: file does not exist: {abs_path}")
+            raise FileNotFoundError(abs_path)
         async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
             content = await f.read()
         
@@ -214,6 +225,10 @@ def index_selected_files(root_dir: str, selected_files: List[str], use_cache: bo
     for rel_path in selected_files:
         file_path = os.path.join(root_dir, rel_path)
         try:
+            if not os.path.exists(file_path):
+                abs_path = os.path.abspath(file_path)
+                logging.error(f"index_selected_files: file does not exist: {abs_path}")
+                raise FileNotFoundError(abs_path)
             mtime = os.path.getmtime(file_path)
             if use_cache and cache and rel_path in cache and cache[rel_path]['mtime'] == mtime:
                 code_index[rel_path] = cache[rel_path]['index']
@@ -250,7 +265,7 @@ def index_selected_files(root_dir: str, selected_files: List[str], use_cache: bo
             if use_cache:
                 update_index_cache(rel_path, file_info, mtime)
         except Exception as e:
-            logging.warning(f"Failed to index {rel_path}: {e}")
+            logging.debug(f"Failed to index {rel_path}: {e}")
             continue
     return code_index
 
@@ -334,11 +349,15 @@ class SemanticSearchAgent:
 
     def summarize_file(self, file_path: str, max_lines: int = 50) -> str:
         try:
+            if not os.path.exists(file_path):
+                abs_path = os.path.abspath(file_path)
+                logging.error(f"summarize_file: file does not exist: {abs_path}")
+                raise FileNotFoundError(abs_path)
             with open(file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
             return ''.join(lines[:max_lines])
         except Exception as e:
-            logging.warning(f"Failed to summarize {file_path}: {e}")
+            logging.debug(f"Failed to summarize {file_path}: {e}")
             return ''
 
     def select_relevant_files(self, tree: Dict[str, List[str]], story: str, prompt: str = None, top_k: int = 10) -> list:
@@ -361,9 +380,13 @@ class SemanticSearchAgent:
                 if f.startswith('...'):
                     continue
                 rel_path = os.path.join(d, f)
+                if not os.path.exists(rel_path):
+                    abs_path = os.path.abspath(rel_path)
+                    logging.error(f"select_relevant_files: file does not exist: {abs_path}")
+                    raise FileNotFoundError(abs_path)
                 summary = self.summarize_file(rel_path)
                 if not summary or not summary.strip():
-                    logging.warning(f"[SemanticSearchAgent] File summary for {rel_path} is empty or whitespace. Skipping embedding.")
+                    logging.debug(f"[SemanticSearchAgent] File summary for {rel_path} is empty or whitespace. Skipping embedding.")
                     continue
                 file_emb = self.embedder(summary, self.model)
                 sim = cosine_similarity(story_emb, file_emb)
@@ -383,10 +406,14 @@ def index_selected_files_async(root_dir: str, selected_files: List[str]) -> Dict
     Index selected files using async parsing for speed. Falls back to sync if asyncio fails.
     """
     try:
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
         return loop.run_until_complete(async_index_selected_files(root_dir, selected_files))
     except Exception as e:
-        logging.warning(f"Async indexing failed, falling back to sync: {e}")
+        logging.info(f"Async indexing failed, falling back to sync: {e}")
         return index_selected_files(root_dir, selected_files)
 
 # --- Agent-Driven File Selection ---

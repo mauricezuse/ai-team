@@ -24,6 +24,9 @@ class PMTool(BaseTool):
         return self._openai_service.generate(prompt, step="pm.suggest")
 
 class PMAgent:
+    def __init__(self):
+        self.conversation_service = None  # Will be set by workflow
+    
     def review_story(self, story, workflow_id=None, conversation_id=None):
         # Use the LLM to analyze the Jira story and generate acceptance criteria, clarifications, and improvements
         description = story['fields'].get('description', '') if isinstance(story, dict) else str(story)
@@ -36,6 +39,14 @@ class PMAgent:
             f"Output a Python dict with keys: 'acceptance_criteria', 'clarifications', 'improvements'."
         )
         
+        # Persist user message if conversation service available
+        if self.conversation_service:
+            self.conversation_service.append_message(
+                role="user",
+                content=prompt,
+                metadata={"step": "pm.review_story", "agent": "pm", "workflow_id": workflow_id}
+            )
+        
         # Use OpenAIService directly with LLM tracking context
         suggestions_str = pm_openai.generate(
             prompt,
@@ -43,6 +54,14 @@ class PMAgent:
             conversation_id=conversation_id,
             step='pm.review_story'
         )
+        
+        # Persist assistant response if conversation service available
+        if self.conversation_service:
+            self.conversation_service.append_message(
+                role="assistant",
+                content=suggestions_str,
+                metadata={"step": "pm.review_story", "agent": "pm", "workflow_id": workflow_id}
+            )
         
         try:
             suggestions = eval(suggestions_str, {"__builtins__": {}})

@@ -1,9 +1,7 @@
-<div *ngIf="workflow" class="card" data-testid="workflow-detail">
+<div *ngIf="workflow as wf" class="card" data-testid="workflow-detail">
   <div class="card-header">
-    <h2 data-testid="workflow-title">{{ workflow.name }}</h2>
+    <h2 data-testid="workflow-title">{{ wf.name }}</h2>
     <div class="workflow-actions">
-      <button pButton type="button" label="Execute" icon="pi pi-play" (click)="executeWorkflow()" 
-              [disabled]="workflow.status === 'running'" class="p-button-success" data-testid="execute-button"></button>
       <button pButton type="button" label="Refresh" icon="pi pi-refresh" (click)="refreshWorkflow()" 
               data-testid="refresh-button" class="p-button-outlined"></button>
     </div>
@@ -12,225 +10,501 @@
   <p-toast></p-toast>
   <div class="workflow-info">
     <p><strong>Status:</strong> 
-      <span [class]="'status-' + workflow.status" data-testid="workflow-status">{{ workflow.status }}</span>
-      <span *ngIf="workflow.isTerminal" class="p-chip p-chip-success">Terminal</span>
-      <span *ngIf="workflow.heartbeat_stale && workflow.status === 'running'" class="p-chip p-chip-warning">Stale Heartbeat</span>
+      <span [class]="'status-' + wf.status" data-testid="workflow-status">{{ wf.status }}</span>
+      <span *ngIf="wf.isTerminal" class="p-chip p-chip-success">Terminal</span>
+      <span *ngIf="wf.heartbeat_stale && wf.status === 'running'" class="p-chip p-chip-warning">Stale Heartbeat</span>
     </p>
-    <p><strong>Created:</strong> {{ workflow.created_at | date:'medium' }}</p>
-    <p *ngIf="workflow.started_at"><strong>Started:</strong> {{ workflow.started_at | date:'medium' }}</p>
-    <p *ngIf="workflow.finished_at"><strong>Finished:</strong> {{ workflow.finished_at | date:'medium' }}</p>
-    <p *ngIf="workflow.error"><strong>Error:</strong> <span class="error-message">{{ workflow.error }}</span></p>
-    <p *ngIf="workflow.last_heartbeat_at"><strong>Last Heartbeat:</strong> {{ workflow.last_heartbeat_at | date:'medium' }}</p>
+    <p><strong>Created:</strong> {{ wf.created_at | date:'medium' }}</p>
+    <p *ngIf="wf.started_at"><strong>Started:</strong> {{ wf.started_at | date:'medium' }}</p>
+    <p *ngIf="wf.finished_at"><strong>Finished:</strong> {{ wf.finished_at | date:'medium' }}</p>
+    <p *ngIf="wf.error"><strong>Error:</strong> <span class="error-message">{{ wf.error }}</span></p>
+    <p *ngIf="wf.last_heartbeat_at"><strong>Last Heartbeat:</strong> {{ wf.last_heartbeat_at | date:'medium' }}</p>
     <p *ngIf="connectionType"><strong>Connection:</strong> 
       <span class="p-chip" [class]="'p-chip-' + connectionType">{{ connectionType }}</span>
     </p>
     <p>
-      <a [routerLink]="['/workflows', workflow.id, 'advanced']" class="p-button p-button-outlined" data-testid="advanced-view-link">
-        Advanced View
-      </a>
-      &nbsp;
       <button pButton type="button" label="Start New Execution" icon="pi pi-play" class="p-button-info" (click)="startNewExecution()" data-testid="start-execution"></button>
       &nbsp;
-      <button pButton type="button" label="Reconcile Status" icon="pi pi-refresh" class="p-button-warning" (click)="reconcileStatus()" data-testid="reconcile-status" *ngIf="workflow.status === 'running'"></button>
+      <button pButton type="button" label="Resume Workflow" icon="pi pi-refresh" class="p-button-success" (click)="resumeWorkflow()" data-testid="resume-workflow" *ngIf="wf.status === 'failed' || wf.status === 'completed'"></button>
+      &nbsp;
+      <button pButton type="button" label="Reconcile Status" icon="pi pi-refresh" class="p-button-warning" (click)="reconcileStatus()" data-testid="reconcile-status" *ngIf="wf.status === 'running'"></button>
+      &nbsp;
+      <button pButton type="button" [label]="showLiveStream ? 'Hide Live Stream' : 'Show Live Stream'" icon="pi pi-bolt" class="p-button-secondary" (click)="showLiveStream = !showLiveStream"></button>
     </p>
   </div>
 
-  <div *ngIf="workflow.agents && workflow.agents.length > 0" class="workflow-agents">
+  <div class="live-stream" *ngIf="showLiveStream" style="margin-top: 1rem;">
+    <h3>Live Stream</h3>
+    <div class="live-columns" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div>
+        <h4>Logs</h4>
+        <cdk-virtual-scroll-viewport itemSize="22" class="log-list" style="height: 200px; border: 1px solid #ddd; padding: .5rem;">
+          <div *cdkVirtualFor="let log of liveLogs; trackBy: trackByLog">
+            <small>[{{ log.timestamp | date:'shortTime' }}]</small>
+            <span [ngClass]="'level-' + (log.level || 'info')">{{ log.level?.toUpperCase() }}</span>
+            <span> - {{ log.message }}</span>
+          </div>
+        </cdk-virtual-scroll-viewport>
+      </div>
+      <div>
+        <h4>Incoming Conversations</h4>
+        <cdk-virtual-scroll-viewport itemSize="64" class="conv-list" style="height: 200px; border: 1px solid #ddd; padding: .5rem;">
+          <div *cdkVirtualFor="let c of liveConversations; trackBy: trackByConversation">
+            <div class="conversation-item">
+              <div class="conversation-header">
+                <div class="conversation-meta">
+                  <span class="agent-badge">{{ c.agent }}</span>
+                  <span class="step-badge">{{ c.step }}</span>
+                  <span class="timestamp">{{ c.timestamp | date:'short' }}</span>
+                </div>
+              </div>
+              <div class="conversation-details">
+                <div *ngIf="c.prompt" class="conversation-prompt">
+                  <strong>Prompt:</strong>
+                  <pre>{{ c.prompt }}</pre>
+                </div>
+                <div *ngIf="c.output" class="conversation-output">
+                  <strong>Output:</strong>
+                  <pre>{{ c.output }}</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </cdk-virtual-scroll-viewport>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="wf.agents && wf.agents.length > 0" class="workflow-agents">
     <h3>Agents Involved</h3>
     <div class="agent-chips">
-      <span *ngFor="let agent of workflow.agents" class="p-chip">{{ agent }}</span>
+      <span *ngFor="let agent of wf.agents" class="p-chip">{{ agent }}</span>
     </div>
   </div>
 
-  <div class="executions" *ngIf="workflow?.executions && workflow.executions && workflow.executions.length > 0">
-    <h3>Executions</h3>
-    <table class="p-datatable-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Status</th>
-          <th>Started</th>
-          <th>Finished</th>
-          <th>Calls</th>
-          <th>Tokens</th>
-          <th>Cost</th>
-          <th>Avg Latency</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let ex of workflow.executions">
-          <td>{{ ex.id }}</td>
-          <td>{{ ex.status }}</td>
-          <td>{{ ex.started_at | date:'short' }}</td>
-          <td>{{ ex.finished_at | date:'short' }}</td>
-          <td>{{ ex.total_calls }}</td>
-          <td>{{ ex.total_tokens }}</td>
-          <td>{{ ex.total_cost }}</td>
-          <td>{{ ex.avg_latency_ms }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div *ngIf="workflow.conversations && workflow.conversations.length > 0" class="conversations-section" data-testid="conversations">
-    <h3>Agent Conversations</h3>
-    <div class="conversation-filters">
-      <input type="text" pInputText placeholder="Search conversations..." 
-             [(ngModel)]="searchTerm" (input)="filterConversations()" class="search-input">
-      <p-dropdown [options]="agentOptions" optionLabel="label" optionValue="value" [(ngModel)]="selectedAgent" (onChange)="filterConversations()" placeholder="All Agents"></p-dropdown>
-      <div class="agent-filter-buttons">
-        <button pButton type="button" label="All" (click)="filterByAgent('')" class="p-button-sm p-button-outlined"></button>
-        <button pButton type="button" label="Product Manager" (click)="filterByAgent('Product Manager')" class="p-button-sm p-button-outlined"></button>
-        <button pButton type="button" label="Solution Architect" (click)="filterByAgent('Solution Architect')" class="p-button-sm p-button-outlined"></button>
-        <button pButton type="button" label="Backend Developer" (click)="filterByAgent('Backend Developer')" class="p-button-sm p-button-outlined"></button>
-        <button pButton type="button" label="Frontend Developer" (click)="filterByAgent('Frontend Developer')" class="p-button-sm p-button-outlined"></button>
-        <button pButton type="button" label="QA Tester" (click)="filterByAgent('QA Tester')" class="p-button-sm p-button-outlined"></button>
+  <p-tabView [(activeIndex)]="activeTabIndex">
+    <p-tabPanel header="Overview" data-testid="tab-overview">
+      <div class="overview">
+        <p><strong>Jira Story:</strong> {{ wf.jira_story_id }} - {{ wf.jira_story_title }}</p>
+        <div *ngIf="wf.jira_story_description">
+          <strong>Description:</strong>
+          <pre>{{ wf.jira_story_description }}</pre>
+        </div>
+        <div *ngIf="prInfo.url || prInfo.skippedReason" class="pr-summary">
+          <p *ngIf="prInfo.url"><strong>PR:</strong> <a [href]="prInfo.url" target="_blank">{{ prInfo.url }}</a></p>
+          <p *ngIf="!prInfo.url && prInfo.skippedReason"><strong>PR:</strong> Skipped ({{ prInfo.skippedReason }})</p>
+        </div>
+        <div *ngIf="allCodeFiles.length > 0" class="code-files-summary">
+          <h4>Code Files Changed/Generated</h4>
+          <ul>
+            <li *ngFor="let file of allCodeFiles">{{ getFileDisplayName(file) }}</li>
+          </ul>
+        </div>
       </div>
-    </div>
-    
-    <div class="conversations-list">
-      <div *ngFor="let conversation of filteredConversations" 
-           class="conversation-item" 
-           [attr.data-testid]="'conversation'"
-           [attr.data-status]="conversation.status">
-        
-        <div class="conversation-header">
-          <div class="conversation-meta">
-            <span class="agent-badge">{{ conversation.agent }}</span>
-            <span class="step-badge">{{ conversation.step }}</span>
-            <span class="timestamp">{{ conversation.timestamp | date:'short' }}</span>
+    </p-tabPanel>
+
+    <p-tabPanel header="Executions" data-testid="tab-executions">
+      <div class="executions" *ngIf="wf && wf.executions && wf.executions.length > 0">
+        <h3>Executions</h3>
+        <table class="p-datatable-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Finished</th>
+              <th>Calls</th>
+              <th>Tokens</th>
+              <th>Cost</th>
+              <th>Avg Latency</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let ex of (wf && wf.executions ? wf.executions : [])">
+              <td>{{ ex.id }}</td>
+              <td>{{ ex.status }}</td>
+              <td>{{ ex.started_at | date:'short' }}</td>
+              <td>{{ ex.finished_at | date:'short' }}</td>
+              <td>{{ ex.total_calls }}</td>
+              <td>{{ ex.total_tokens }}</td>
+              <td>{{ ex.total_cost }}</td>
+              <td>{{ ex.avg_latency_ms }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="exec-compare" style="margin-top: 1rem;">
+          <h4>Compare Executions</h4>
+          <div *ngIf="wf.executions.length > 1; else noCompare">
+            <label for="execA">Execution A:</label>
+            <select id="execA" [(ngModel)]="execA">
+              <option *ngFor="let ex of wf.executions" [ngValue]="ex.id">#{{ ex.id }}</option>
+            </select>
+            &nbsp;&nbsp;
+            <label for="execB">Execution B:</label>
+            <select id="execB" [(ngModel)]="execB">
+              <option *ngFor="let ex of wf.executions" [ngValue]="ex.id">#{{ ex.id }}</option>
+            </select>
+            &nbsp;&nbsp;
+            <button pButton type="button" label="Compare" (click)="compareExecutions()"></button>
+            <div *ngIf="execCompareResult" style="margin-top: .5rem;">
+              <pre>{{ execCompareResult | json }}</pre>
+            </div>
           </div>
-          <button pButton type="button" 
-                  [icon]="conversation.expanded ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
-                  [attr.data-testid]="conversation.expanded ? 'collapse-button' : 'expand-button'"
-                  (click)="toggleConversation(conversation)"
-                  class="p-button-text p-button-sm"></button>
+          <ng-template #noCompare>
+            <p>No executions yet</p>
+          </ng-template>
+        </div>
+      </div>
+      <div *ngIf="!wf || !wf.executions || (wf.executions.length === 0)">
+        <p>No executions yet</p>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="Conversations" data-testid="tab-conversations">
+      <div *ngIf="activeTabIndex === 2 && wf && wf.conversations && wf.conversations.length > 0" class="conversations-section" data-testid="conversations">
+        <h3>Agent Conversations</h3>
+        <div class="conversation-filters">
+          <input type="text" pInputText placeholder="Search conversations..." 
+                 [(ngModel)]="searchTerm" (input)="filterConversations()" class="search-input">
+          <p-dropdown [options]="agentOptions" optionLabel="label" optionValue="value" [(ngModel)]="selectedAgent" (onChange)="filterConversations()" placeholder="All Agents"></p-dropdown>
+          <div class="agent-filter-buttons">
+            <button pButton type="button" label="All" (click)="filterByAgent('')" class="p-button-sm p-button-outlined"></button>
+            <button pButton type="button" label="Product Manager" (click)="filterByAgent('Product Manager')" class="p-button-sm p-button-outlined"></button>
+            <button pButton type="button" label="Solution Architect" (click)="filterByAgent('Solution Architect')" class="p-button-sm p-button-outlined"></button>
+            <button pButton type="button" label="Backend Developer" (click)="filterByAgent('Backend Developer')" class="p-button-sm p-button-outlined"></button>
+            <button pButton type="button" label="Frontend Developer" (click)="filterByAgent('Frontend Developer')" class="p-button-sm p-button-outlined"></button>
+            <button pButton type="button" label="QA Tester" (click)="filterByAgent('QA Tester')" class="p-button-sm p-button-outlined"></button>
+          </div>
         </div>
         
-        <div *ngIf="conversation.expanded" class="conversation-details">
-          <div *ngIf="conversation.prompt" class="conversation-prompt">
-            <strong>Agent Prompt:</strong>
-            <div class="prompt-content">
-              <pre>{{ conversation.prompt }}</pre>
+        <div class="conversations-list">
+          <div *ngFor="let conversation of filteredConversations" 
+               class="conversation-item" 
+               [attr.data-testid]="'conversation'"
+               [attr.data-status]="conversation.status">
+            
+            <div class="conversation-header">
+              <div class="conversation-meta">
+                <span class="agent-badge">{{ conversation.agent }}</span>
+                <span class="step-badge">{{ conversation.step }}</span>
+                <span class="timestamp">{{ conversation.timestamp | date:'short' }}</span>
+              </div>
+              <button pButton type="button" 
+                      [icon]="conversation.expanded ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"
+                      [attr.data-testid]="conversation.expanded ? 'collapse-button' : 'expand-button'"
+                      (click)="toggleConversation(conversation)"
+                      class="p-button-text p-button-sm"></button>
             </div>
-          </div>
-          
-          <div *ngIf="conversation.details" class="conversation-details-text">
-            <strong>Details:</strong> {{ conversation.details }}
-          </div>
-          <div *ngIf="conversation.output" class="conversation-output">
-            <strong>Output:</strong>
-            <pre>{{ conversation.output }}</pre>
-          </div>
-          
-          <div *ngIf="conversation.code_files && conversation.code_files.length > 0" class="code-files">
-            <strong>Code Files Generated:</strong>
-            <p-accordion>
-              <p-accordionTab *ngFor="let file of conversation.code_files; let i = index" 
-                              [header]="getFileDisplayName(file)" 
-                              [selected]="false">
-                <div class="code-file-content">
-                  <div class="code-file-header">
-                    <span class="file-name">
-                      <i class="pi pi-file"></i> {{ getFileDisplayName(file) }}
-                    </span>
-                    <span class="file-path">{{ getFilePath(file) }}</span>
-                    <a [href]="getFileUrl(file)" 
-                       target="_blank" 
-                       class="file-link"
-                       data-testid="code-file">
-                      <i class="pi pi-external-link"></i> View in Repository
-                    </a>
+            
+            <div *ngIf="conversation.expanded" class="conversation-details">
+              <div *ngIf="conversation.prompt" class="conversation-prompt">
+                <strong>Agent Prompt:</strong>
+                <div class="prompt-content">
+                  <pre>{{ conversation.prompt }}</pre>
+                </div>
+              </div>
+              
+              <div *ngIf="conversation.messages && conversation.messages.length > 0" class="conversation-messages">
+                <strong>Messages ({{ conversation.messages.length }}):</strong>
+                <div *ngFor="let message of conversation.messages; let i = index" class="message-item">
+                  <div class="message-header">
+                    <span class="message-role">{{ message.role }}</span>
+                    <span class="message-timestamp">{{ message.message_metadata?.created_at | date:'short' }}</span>
                   </div>
-                  <div class="code-preview">
-                    <pre><code>{{ getCodePreview(file) }}</code></pre>
+                  <div class="message-content">
+                    <pre>{{ message.content }}</pre>
+                  </div>
+                  <div *ngIf="message.artifacts && message.artifacts.length > 0" class="message-artifacts">
+                    <strong>Artifacts:</strong>
+                    <ul>
+                      <li *ngFor="let artifact of message.artifacts">{{ artifact }}</li>
+                    </ul>
                   </div>
                 </div>
-              </p-accordionTab>
-            </p-accordion>
-          </div>
-          
-          <div *ngIf="conversation.escalations && conversation.escalations.length > 0" class="escalations">
-            <strong>Escalations:</strong>
-            <div *ngFor="let escalation of conversation.escalations" class="escalation-item">
-              <span class="escalation-from">{{ escalation.from_agent }} → {{ escalation.to_agent }}</span>
-              <span class="escalation-reason">{{ escalation.reason }}</span>
-              <span class="escalation-status">{{ escalation.status }}</span>
-            </div>
-          </div>
-          
-          <div *ngIf="conversation.collaborations && conversation.collaborations.length > 0" class="collaborations">
-            <strong>Collaborations:</strong>
-            <div *ngFor="let collaboration of conversation.collaborations" class="collaboration-item">
-              <span class="collaboration-from">{{ collaboration.from_agent }} → {{ collaboration.to_agent }}</span>
-              <span class="collaboration-type">{{ collaboration.request_type }}</span>
-              <span class="collaboration-status">{{ collaboration.status }}</span>
-            </div>
-          </div>
-          
-          <div *ngIf="conversation.llm_calls && conversation.llm_calls.length > 0" class="llm-calls">
-            <strong>LLM Agent Calls:</strong>
-            <div class="llm-summary">
-              <span class="token-usage">Total Tokens: {{ conversation.total_tokens_used }}</span>
-              <span class="cost-usage">Total Cost: ${{ conversation.total_cost }}</span>
-            </div>
-            <p-accordion>
-              <p-accordionTab *ngFor="let call of conversation.llm_calls; let i = index" 
-                              [header]="getLLMCallHeader(call)" 
-                              [selected]="false">
-                <div class="llm-call-content">
-                  <div class="llm-call-header">
-                    <div class="call-info">
-                      <span class="model-name">{{ call.model }}</span>
-                      <span class="call-timestamp">{{ call.timestamp | date:'short' }}</span>
+              </div>
+              
+              <!-- Fallback for old data structure -->
+              <div *ngIf="!conversation.messages && conversation.details" class="conversation-details-text">
+                <strong>Details:</strong> {{ conversation.details }}
+              </div>
+              <div *ngIf="!conversation.messages && conversation.output" class="conversation-output">
+                <strong>Output:</strong>
+                <pre>{{ conversation.output }}</pre>
+              </div>
+              
+              <div *ngIf="conversation.code_files && conversation.code_files.length > 0" class="code-files">
+                <strong>Code Files Generated:</strong>
+                <p-accordion>
+                  <p-accordionTab *ngFor="let file of conversation.code_files; let i = index" 
+                                  [header]="getFileDisplayName(file)" 
+                                  [selected]="true">
+                    <div class="code-file-content">
+                      <div class="code-file-header">
+                        <span class="file-name">
+                          <i class="pi pi-file"></i> {{ getFileDisplayName(file) }}
+                        </span>
+                        <span class="file-path">{{ getFilePath(file) }}</span>
+                        <a [href]="getFileUrl(file)" 
+                           target="_blank" 
+                           class="file-link"
+                           data-testid="code-file">
+                          <i class="pi pi-external-link"></i> View in Repository
+                        </a>
+                      </div>
+                      <div class="code-preview">
+                        <pre><code>{{ getCodePreview(file) }}</code></pre>
+                      </div>
                     </div>
-                    <div class="call-metrics">
-                      <span class="tokens">{{ call.total_tokens }} tokens</span>
-                      <span class="cost">${{ call.cost }}</span>
-                      <span class="response-time">{{ call.response_time_ms }}ms</span>
-                    </div>
-                  </div>
-                  
-                  <div class="llm-call-details">
-                    <div class="request-section">
-                      <h4>Request:</h4>
-                      <div class="messages">
-                        <div *ngFor="let message of call.request_data.messages" class="message">
-                          <span class="message-role">{{ message.role }}:</span>
-                          <div class="message-content">{{ message.content }}</div>
+                  </p-accordionTab>
+                </p-accordion>
+              </div>
+              
+              <div *ngIf="conversation.escalations && conversation.escalations.length > 0" class="escalations">
+                <strong>Escalations:</strong>
+                <div *ngFor="let escalation of conversation.escalations" class="escalation-item">
+                  <span class="escalation-from">{{ escalation.from_agent }} → {{ escalation.to_agent }}</span>
+                  <span class="escalation-reason">{{ escalation.reason }}</span>
+                  <span class="escalation-status">{{ escalation.status }}</span>
+                </div>
+              </div>
+              
+              <div *ngIf="conversation.collaborations && conversation.collaborations.length > 0" class="collaborations">
+                <strong>Collaborations:</strong>
+                <div *ngFor="let collaboration of conversation.collaborations" class="collaboration-item">
+                  <span class="collaboration-from">{{ collaboration.from_agent }} → {{ collaboration.to_agent }}</span>
+                  <span class="collaboration-type">{{ collaboration.request_type }}</span>
+                  <span class="collaboration-status">{{ collaboration.status }}</span>
+                </div>
+              </div>
+              
+              <div *ngIf="conversation.llm_calls && conversation.llm_calls.length > 0" class="llm-calls">
+                <strong>LLM Agent Calls:</strong>
+                <div class="llm-summary">
+                  <span class="token-usage">Total Tokens: {{ conversation.total_tokens_used }}</span>
+                  <span class="cost-usage">Total Cost: ${{ conversation.total_cost }}</span>
+                </div>
+                <p-accordion>
+                  <p-accordionTab *ngFor="let call of conversation.llm_calls; let i = index" 
+                                  [header]="getLLMCallHeader(call)" 
+                                  [selected]="false">
+                    <div class="llm-call-content">
+                      <div class="llm-call-header">
+                        <div class="call-info">
+                          <span class="model-name">{{ call.model }}</span>
+                          <span class="call-timestamp">{{ call.timestamp | date:'short' }}</span>
+                        </div>
+                        <div class="call-metrics">
+                          <span class="tokens">{{ call.total_tokens }} tokens</span>
+                          <span class="cost">${{ call.cost }}</span>
+                          <span class="response-time">{{ call.response_time_ms }}ms</span>
                         </div>
                       </div>
-                    </div>
-                    
-                    <div class="response-section">
-                      <h4>Response:</h4>
-                      <div class="response-content">{{ call.response_data.content }}</div>
-                    </div>
-                    
-                    <div class="usage-breakdown">
-                      <h4>Token Usage:</h4>
-                      <div class="usage-stats">
-                        <span>Prompt: {{ call.prompt_tokens }} tokens</span>
-                        <span>Completion: {{ call.completion_tokens }} tokens</span>
-                        <span>Total: {{ call.total_tokens }} tokens</span>
+                      
+                      <div class="llm-call-details">
+                        <div class="request-section">
+                          <h4>Request:</h4>
+                          <div class="messages">
+                            <div *ngFor="let message of call.request_data?.messages || []" class="message">
+                              <span class="message-role">{{ message.role }}:</span>
+                              <div class="message-content">{{ message.content }}</div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div class="response-section">
+                          <h4>Response:</h4>
+                          <div class="response-content">{{ call.response_data?.content || 'No response data available' }}</div>
+                        </div>
+                        
+                        <div class="usage-breakdown">
+                          <h4>Token Usage:</h4>
+                          <div class="usage-stats">
+                            <span>Prompt: {{ call.prompt_tokens }} tokens</span>
+                            <span>Completion: {{ call.completion_tokens }} tokens</span>
+                            <span>Total: {{ call.total_tokens }} tokens</span>
+                          </div>
+                        </div>
+                <div style="margin-top: .5rem;">
+                  <a (click)="$event.preventDefault(); activeTabIndex = 3; llmSelectedConvId = conversation.id" href="#" data-testid="open-llm-calls-from-detail">Open in LLM Calls</a>
+                </div>
                       </div>
                     </div>
-            <div style="margin-top: .5rem;">
-              <a [routerLink]="['/workflows', workflow.id, 'advanced', 'llm-calls']" [queryParams]="{ conversationId: conversation.id }" data-testid="open-llm-calls-from-detail">Open in LLM Calls</a>
+                  </p-accordionTab>
+                </p-accordion>
+              </div>
             </div>
-                  </div>
-                </div>
-              </p-accordionTab>
-            </p-accordion>
           </div>
         </div>
       </div>
-    </div>
-  </div>
+      <div *ngIf="activeTabIndex === 2 && (!wf.conversations || wf.conversations.length === 0)" class="no-conversations">
+        <p>No conversations yet</p>
+      </div>
+    </p-tabPanel>
 
-  <div *ngIf="!workflow.conversations || workflow.conversations.length === 0" class="no-conversations">
-    <p>No conversations yet</p>
-  </div>
+    <p-tabPanel header="LLM Calls" data-testid="tab-llm-calls">
+      <div *ngIf="llmConversations.length > 0">
+        <label for="llmConv">Conversation:</label>
+        <select id="llmConv" [(ngModel)]="llmSelectedConvId">
+          <option *ngFor="let conv of llmConversations" [ngValue]="conv.id">{{ conv.label }}</option>
+        </select>
+        <div class="llm-calls-table" *ngIf="selectedLlmCalls.length > 0">
+          <table class="p-datatable-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Prompt</th>
+                <th>Completion</th>
+                <th>Total Tokens</th>
+                <th>Cost</th>
+                <th>Latency</th>
+                <th>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let call of selectedLlmCalls">
+                <td>{{ call.model }}</td>
+                <td>{{ call.prompt_tokens }}</td>
+                <td>{{ call.completion_tokens }}</td>
+                <td>{{ call.total_tokens }}</td>
+                <td>${{ call.cost }}</td>
+                <td>{{ call.response_time_ms }}ms</td>
+                <td>{{ call.timestamp | date:'short' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div *ngIf="selectedLlmCalls.length === 0">
+          <p>No calls found for selected conversation</p>
+        </div>
+      </div>
+      <div *ngIf="llmConversations.length === 0">
+        <p>No LLM calls recorded</p>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="Escalations" data-testid="tab-escalations">
+      <div *ngIf="escalationsList.length > 0">
+        <ul>
+          <li *ngFor="let e of escalationsList">{{ e.from_agent }} → {{ e.to_agent }} — {{ e.reason }} ({{ e.status }})</li>
+        </ul>
+      </div>
+      <div *ngIf="escalationsList.length === 0">
+        <p>No escalations</p>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="Code Diffs" data-testid="tab-code-diffs">
+      <div *ngIf="activeTabIndex === 5">
+        <div *ngIf="diffs.length > 0; else noDiffs">
+          <p-accordion>
+            <p-accordionTab *ngFor="let d of diffs" [header]="d.path">
+              <div class="code-file-content">
+                <div class="code-file-header">
+                  <span class="file-name">
+                    <i class="pi pi-file"></i> {{ d.path.split('/').pop() }}
+                  </span>
+                  <span class="file-path">{{ d.path }}</span>
+                </div>
+                <div class="code-preview">
+                  <pre><code>{{ d.patch }}</code></pre>
+                </div>
+              </div>
+            </p-accordionTab>
+          </p-accordion>
+        </div>
+        <div class="actions" style="margin-top: .5rem;">
+          <button pButton type="button" label="Refresh Diffs" icon="pi pi-refresh" (click)="refreshDiffs()"></button>
+        </div>
+        <ng-template #noDiffs>
+          <p>No code changes detected yet</p>
+          <div class="actions" style="margin-top: .5rem;">
+            <button pButton type="button" label="Refresh Diffs" icon="pi pi-refresh" (click)="refreshDiffs()"></button>
+          </div>
+        </ng-template>
+      </div>
+    </p-tabPanel>
+
+    <p-tabPanel header="PR & Checks" data-testid="tab-pr-checks">
+      <div *ngIf="prInfo.url; else prMissing">
+        <p><strong>Pull Request:</strong> <a [href]="prInfo.url" target="_blank">{{ prInfo.url }}</a></p>
+        <div class="checks" *ngIf="prChecks.length > 0; else noChecks">
+          <table class="p-datatable-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Conclusion</th>
+                <th>Started</th>
+                <th>Completed</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let c of prChecks">
+                <td>{{ c.name }}</td>
+                <td>{{ c.status }}</td>
+                <td>{{ c.conclusion }}</td>
+                <td>{{ c.started_at | date:'short' }}</td>
+                <td>{{ c.completed_at | date:'short' }}</td>
+                <td><a *ngIf="c.html_url" [href]="c.html_url" target="_blank">Open</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ng-template #noChecks>
+          <p>No checks available yet</p>
+          <div class="actions" style="margin-top: .5rem;">
+            <button pButton type="button" label="Refresh PR & Checks" icon="pi pi-refresh" (click)="refreshPrChecks()"></button>
+          </div>
+        </ng-template>
+        <div class="actions" style="margin-top: .5rem;">
+          <button pButton type="button" label="Refresh PR & Checks" icon="pi pi-refresh" (click)="refreshPrChecks()"></button>
+        </div>
+      </div>
+      <ng-template #prMissing>
+        <p *ngIf="prInfo.skippedReason; else noPrInfo">PR skipped: {{ prInfo.skippedReason }}</p>
+        <ng-template #noPrInfo>
+          <p>No PR information available yet</p>
+        </ng-template>
+      </ng-template>
+    </p-tabPanel>
+
+    <p-tabPanel header="Artifacts" data-testid="tab-artifacts">
+      <div *ngIf="artifacts.length > 0; else noArtifacts">
+        <table class="p-datatable-table">
+          <thead>
+            <tr>
+              <th>Kind</th>
+              <th>URI</th>
+              <th>Size</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let a of artifacts">
+              <td>{{ a.kind }}</td>
+              <td>
+                <a *ngIf="a.uri" [href]="a.uri" target="_blank">{{ a.uri }}</a>
+                <span *ngIf="!a.uri">-</span>
+              </td>
+              <td>{{ a.size_bytes || '-' }}</td>
+              <td>{{ a.created_at | date:'short' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="actions" style="margin-top: .5rem;">
+          <button pButton type="button" label="Refresh Artifacts" icon="pi pi-refresh" (click)="refreshArtifacts()"></button>
+        </div>
+      </div>
+      <ng-template #noArtifacts>
+        <p>No artifacts available yet</p>
+        <div class="actions" style="margin-top: .5rem;">
+          <button pButton type="button" label="Refresh Artifacts" icon="pi pi-refresh" (click)="refreshArtifacts()"></button>
+        </div>
+      </ng-template>
+    </p-tabPanel>
+  </p-tabView>
+
 </div>
 
 <div *ngIf="!workflow">

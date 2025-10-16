@@ -5,7 +5,7 @@ import requests  # type: ignore
 import subprocess
 
 class GitHubService:
-    def __init__(self, use_real: bool):
+    def __init__(self, use_real: bool = True):
         self.use_real = use_real
         self.project_key = os.getenv("NEGISHI_PROJECT_KEY", "NEGISHI")
         self.token = os.getenv("NEGISHI_GITHUB_TOKEN")
@@ -197,3 +197,132 @@ class GitHubService:
         except subprocess.CalledProcessError as e:
             print(f"[GitHubService ERROR] Failed to add submodule: {e}")
             return False 
+
+    # ------- New helper methods for PR/checks/diffs/artifacts --------
+    def get_workflow_pr(self, workflow):
+        """
+        Resolve the latest PR for the given workflow. Implement based on naming or saved metadata.
+        """
+        if not self.use_real:
+            # Stub: no PR returned
+            return None
+        try:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            # Heuristic: list PRs and match by branch naming or title prefix
+            prs = requests.get(f"{self.api_url}/pulls", headers=headers, params={"state": "all"}).json()
+            for pr in prs:
+                title = pr.get('title') or ''
+                if workflow.jira_story_id and workflow.jira_story_id in title:
+                    return {
+                        'number': pr.get('number'),
+                        'url': pr.get('html_url'),
+                        'title': pr.get('title'),
+                        'state': pr.get('state'),
+                        'head_branch': pr.get('head', {}).get('ref'),
+                        'base_branch': pr.get('base', {}).get('ref'),
+                        'head_sha': pr.get('head', {}).get('sha'),
+                        'created_at': pr.get('created_at'),
+                        'merged_at': pr.get('merged_at'),
+                    }
+            return None
+        except Exception:
+            return None
+
+    def list_check_runs_for_pr(self, workflow, pr_number):
+        if not self.use_real:
+            return []
+        try:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            # Obtain head SHA first
+            pr = requests.get(f"{self.api_url}/pulls/{pr_number}", headers=headers).json()
+            head_sha = pr.get('head', {}).get('sha')
+            if not head_sha:
+                return []
+            checks = requests.get(f"{self.api_url}/commits/{head_sha}/check-runs", headers={**headers, "Accept": "application/vnd.github.antiope-preview+json"}).json()
+            runs = checks.get('check_runs', []) if isinstance(checks, dict) else []
+            out = []
+            for r in runs:
+                out.append({
+                    'name': r.get('name'),
+                    'status': r.get('status'),
+                    'conclusion': r.get('conclusion'),
+                    'html_url': r.get('html_url') or r.get('details_url'),
+                    'started_at': r.get('started_at'),
+                    'completed_at': r.get('completed_at'),
+                })
+            return out
+        except Exception:
+            return []
+
+    def get_workflow_diffs(self, workflow):
+        if not self.use_real:
+            return []
+        try:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            # Heuristic: find PR and get files with patches
+            pr = self.get_workflow_pr(workflow)
+            if not pr:
+                return []
+            files = requests.get(f"{self.api_url}/pulls/{pr['number']}/files", headers=headers).json()
+            diffs = []
+            for f in files or []:
+                diffs.append({
+                    'path': f.get('filename'),
+                    'patch': f.get('patch') or '',
+                    'head_sha': pr.get('head_sha'),
+                    'base_sha': None,
+                })
+            return diffs
+        except Exception:
+            return []
+
+    def list_workflow_artifacts(self, workflow):
+        if not self.use_real:
+            return []
+        try:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            # Basic approach: list Actions artifacts (requires Actions usage)
+            arts = requests.get(f"{self.api_url}/actions/artifacts", headers=headers).json()
+            items = arts.get('artifacts', []) if isinstance(arts, dict) else []
+            out = []
+            for a in items:
+                out.append({
+                    'kind': 'actions-artifact',
+                    'uri': a.get('archive_download_url'),
+                    'checksum': None,
+                    'size_in_bytes': a.get('size_in_bytes'),
+                })
+            return out
+        except Exception:
+            return []
+
+    def rerun_check_suite(self, check_suite_id: int) -> bool:
+        if not self.use_real:
+            print(f"[Stub] Would re-run check suite {check_suite_id}")
+            return True
+        try:
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github+json"
+            }
+            url = f"{self.api_url}/check-suites/{check_suite_id}/rerequest"
+            resp = requests.post(url, headers=headers)
+            if 200 <= resp.status_code < 300:
+                return True
+            print(f"[GitHub ERROR] Rerun check suite failed: {resp.status_code} {resp.text}")
+            return False
+        except Exception as e:
+            print(f"[GitHub ERROR] rerun_check_suite failed: {e}")
+            return False

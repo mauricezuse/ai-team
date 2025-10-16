@@ -15,7 +15,8 @@ ENVIRONMENT=development
 
 # (Optional) GitHub Integration
 GITHUB_TOKEN=your-github-token
-GITHUB_REPO=your-org/your-repo
+NEGISHI_GITHUB_REPO=your-org/your-repo
+GITHUB_WEBHOOK_SECRET=your-webhook-secret
 
 # (Optional) Jira Integration
 JIRA_API_TOKEN=your-jira-api-token
@@ -26,3 +27,5 @@ PROJECT_KEY=NEGISHI
 
 USE_REAL_GITHUB=false
 USE_REAL_JIRA=false 
+HEARTBEAT_INTERVAL_SECONDS=10
+HEARTBEAT_TIMEOUT_SECONDS=60

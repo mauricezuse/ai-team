@@ -22,6 +22,7 @@ from crewai_app.agents.frontend import FrontendAgent, frontend_openai
 from crewai_app.utils.codebase_indexer import build_directory_tree, agent_select_relevant_files, index_selected_files_async
 from crewai_app.services.openai_service import PromptTooLargeError, OpenAIService
 from crewai_app.utils.logger import logger, attach_handlers_to_all_ai_team_loggers
+from crewai_app.services.workflow_status_service import workflow_status_service
 from crewai_app.config import settings
 
 logger.info('[EnhancedWorkflow] Logger initialized in enhanced_story_workflow.py')
@@ -47,15 +48,36 @@ class EnhancedStoryWorkflow:
         self.workflow_log = []
         self.collaboration_queue = []  # Track pending collaborations
         self.escalation_queue = []     # Track pending escalations
+        self.conversation_history = []  # Track conversation patterns for loop detection
+        self.max_iterations = 10  # Maximum iterations per step to prevent infinite loops
         self.current_conversation_id = None  # Track current conversation for LLM calls
         
-        # Initialize agents with proper OpenAIService instances
+        # Initialize agents with proper OpenAIService instances and workflow context
+        # Note: Some agents (PM, Architect, Tester, Reviewer) don't inherit from BaseAgent
+        # so we pass workflow_id through their methods instead of constructor
         self.pm = PMAgent()
-        self.architect = ArchitectAgent(OpenAIService(deployment=settings.deployment_architect))
-        self.developer = DeveloperAgent(OpenAIService(deployment=settings.deployment_developer))
+        self.architect = ArchitectAgent(
+            OpenAIService(deployment=settings.deployment_architect, workflow_id=workflow_id, agent_name="architect", step_name="architect")
+        )
+        self.developer = DeveloperAgent(
+            OpenAIService(deployment=settings.deployment_developer, workflow_id=workflow_id, agent_name="developer", step_name="developer"),
+            workflow_id=workflow_id, step_name="developer"
+        )
         self.tester = TesterAgent()
         self.reviewer = ReviewerAgent()
-        self.frontend = FrontendAgent(frontend_openai)
+        self.frontend = FrontendAgent(
+            OpenAIService(deployment=settings.deployment_frontend, workflow_id=workflow_id, agent_name="frontend", step_name="frontend"),
+            workflow_id=workflow_id, step_name="frontend"
+        )
+        
+        # Assign ConversationService to all agents that make LLM calls
+        if workflow_id:
+            from crewai_app.services.conversation_service import ConversationService
+            self.pm.conversation_service = ConversationService(workflow_id, "pm", "pm")
+            self.architect.conversation_service = ConversationService(workflow_id, "architect", "architect")
+            self.developer.conversation_service = ConversationService(workflow_id, "developer", "developer")
+            self.frontend.conversation_service = ConversationService(workflow_id, "frontend", "frontend")
+            # Tester and Reviewer agents don't make LLM calls, so they don't need ConversationService
         
         # Agent registry for easy lookup
         self.agents = {
@@ -101,6 +123,39 @@ class EnhancedStoryWorkflow:
         else:
             print(f"Backend repo already present at {submodule_path}")
         return submodule_path
+
+    def _detect_conversation_loop(self, agent_name: str, message: str) -> bool:
+        """Detect if we're in a conversation loop"""
+        # Add current message to history
+        self.conversation_history.append({
+            "agent": agent_name,
+            "message": message[:100],  # First 100 chars for pattern matching
+            "timestamp": datetime.utcnow()
+        })
+        
+        # Keep only last 20 messages for analysis
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
+        
+        # Check for repeated patterns in last 10 messages
+        if len(self.conversation_history) >= 10:
+            recent_messages = [h["message"] for h in self.conversation_history[-10:]]
+            # Check if same message appears 3+ times
+            message_counts = {}
+            for msg in recent_messages:
+                message_counts[msg] = message_counts.get(msg, 0) + 1
+                if message_counts[msg] >= 3:
+                    logger.warning(f"[EnhancedWorkflow] Loop detected: '{msg}' repeated {message_counts[msg]} times")
+                    return True
+        
+        return False
+    
+    def _should_escalate_loop(self, agent_name: str, iteration_count: int) -> bool:
+        """Check if we should escalate due to loop or max iterations"""
+        if iteration_count >= self.max_iterations:
+            logger.warning(f"[EnhancedWorkflow] Max iterations ({self.max_iterations}) reached for {agent_name}")
+            return True
+        return False
 
     def load_global_rules(self):
         """Load global coding rules from YAML file."""
@@ -359,9 +414,18 @@ class EnhancedStoryWorkflow:
         
         try:
             # Load checkpoint if resuming
+            print(f'[EnhancedWorkflow] Resume flag: {resume}')
+            print(f'[EnhancedWorkflow] Checkpoint file: {self.checkpoint_file}')
+            print(f'[EnhancedWorkflow] Checkpoint file exists: {os.path.exists(self.checkpoint_file)}')
+            
             if resume and self.load_checkpoint():
                 last_step = self.get_last_step()
                 print(f'[EnhancedWorkflow] Resuming from step: {last_step}')
+                
+                # Check if workflow is already complete
+                if last_step == 'final_review_and_testing_completed':
+                    print('[EnhancedWorkflow] Workflow is already complete. Returning existing results.')
+                    return self.workflow_log
             else:
                 last_step = None
                 self.workflow_log = []
@@ -395,9 +459,81 @@ class EnhancedStoryWorkflow:
                 self.save_checkpoint()
                 return final_results
             else:
-                # Resume logic - implement based on last_step
-                print(f'[EnhancedWorkflow] Resume logic not yet implemented for step: {last_step}')
-                return self.workflow_log
+                # Resume logic - continue from last_step
+                print(f'[EnhancedWorkflow] Resuming from step: {last_step}')
+                logger.info(f'[EnhancedWorkflow] Resuming from step: {last_step}')
+                
+                # Load previous data from workflow log
+                story = None
+                codebase_index = None
+                plan = None
+                tasks = None
+                
+                # Extract data from previous steps
+                for entry in self.workflow_log:
+                    if entry.get('step') == 'story_retrieved_and_analyzed':
+                        story = entry.get('story')
+                    elif entry.get('step') == 'codebase_indexed':
+                        codebase_index = entry.get('codebase_index')
+                    elif entry.get('step') == 'implementation_plan_generated':
+                        plan = entry.get('plan')
+                    elif entry.get('step') == 'tasks_broken_down_with_collaboration':
+                        tasks = entry.get('tasks')
+                
+                # Resume from the appropriate step based on last_step
+                if last_step == 'story_retrieved_and_analyzed':
+                    # Resume from codebase indexing
+                    print('[EnhancedWorkflow] Resuming from codebase indexing...')
+                    codebase_index = self._index_codebase()
+                    plan = self._generate_implementation_plan(story, codebase_index)
+                    tasks = self._break_down_tasks_with_collaboration(story, plan)
+                    collaboration_results = self.process_collaboration_queue()
+                    results = self._execute_tasks_with_escalation(tasks, plan, codebase_index)
+                    final_results = self._final_review_and_testing(results)
+                    
+                elif last_step == 'codebase_indexed':
+                    # Resume from implementation plan generation
+                    print('[EnhancedWorkflow] Resuming from implementation plan generation...')
+                    plan = self._generate_implementation_plan(story, codebase_index)
+                    tasks = self._break_down_tasks_with_collaboration(story, plan)
+                    collaboration_results = self.process_collaboration_queue()
+                    results = self._execute_tasks_with_escalation(tasks, plan, codebase_index)
+                    final_results = self._final_review_and_testing(results)
+                    
+                elif last_step == 'implementation_plan_generated':
+                    # Resume from task breakdown
+                    print('[EnhancedWorkflow] Resuming from task breakdown...')
+                    tasks = self._break_down_tasks_with_collaboration(story, plan)
+                    collaboration_results = self.process_collaboration_queue()
+                    results = self._execute_tasks_with_escalation(tasks, plan, codebase_index)
+                    final_results = self._final_review_and_testing(results)
+                    
+                elif last_step == 'tasks_broken_down_with_collaboration':
+                    # Resume from collaboration processing
+                    print('[EnhancedWorkflow] Resuming from collaboration processing...')
+                    collaboration_results = self.process_collaboration_queue()
+                    results = self._execute_tasks_with_escalation(tasks, plan, codebase_index)
+                    final_results = self._final_review_and_testing(results)
+                    
+                elif last_step == 'collaboration_queued':
+                    # Resume from task execution
+                    print('[EnhancedWorkflow] Resuming from task execution...')
+                    results = self._execute_tasks_with_escalation(tasks, plan, codebase_index)
+                    final_results = self._final_review_and_testing(results)
+                    
+                elif last_step == 'tasks_executed_with_escalation':
+                    # Resume from final review
+                    print('[EnhancedWorkflow] Resuming from final review...')
+                    results = [entry for entry in self.workflow_log if entry.get('step') == 'tasks_executed_with_escalation']
+                    final_results = self._final_review_and_testing(results)
+                    
+                else:
+                    # Unknown step, restart from beginning
+                    print(f'[EnhancedWorkflow] Unknown resume step: {last_step}, restarting from beginning...')
+                    return self.run(resume=False)
+                
+                self.save_checkpoint()
+                return final_results
                 
         except Exception as e:
             logger.error(f'[EnhancedWorkflow] Workflow failed: {e}')
@@ -439,6 +575,7 @@ class EnhancedStoryWorkflow:
         print(f'[EnhancedWorkflow] Retrieving story {self.story_id} from Jira...')
         
         story = self.jira_service.get_story(self.story_id)
+        workflow_status_service.touch_heartbeat(self.workflow_id)
         if not story:
             logger.error(f'[EnhancedWorkflow] Failed to retrieve story {self.story_id}')
             return None
@@ -452,6 +589,7 @@ class EnhancedStoryWorkflow:
             workflow_id=self.workflow_id,
             conversation_id=self.current_conversation_id
         )
+        workflow_status_service.touch_heartbeat(self.workflow_id)
         
         self.workflow_log.append({
             'step': 'story_retrieved_and_analyzed',
@@ -467,9 +605,14 @@ class EnhancedStoryWorkflow:
         print('[EnhancedWorkflow] Indexing codebase...')
         
         try:
-            tree = build_directory_tree(self.codebase_root, allowed_dirs=['backend', 'frontend'])
+            # Include common monorepo-style layouts
+            workflow_status_service.touch_heartbeat(self.workflow_id)
+            tree = build_directory_tree(self.codebase_root, allowed_dirs=['backend', 'frontend', 'backend/apps'])
+            workflow_status_service.touch_heartbeat(self.workflow_id)
             selected_files = agent_select_relevant_files(tree, self.story_id, agent=None, plugin='semantic')
+            workflow_status_service.touch_heartbeat(self.workflow_id)
             codebase_index = index_selected_files_async(self.codebase_root, selected_files)
+            workflow_status_service.touch_heartbeat(self.workflow_id)
             # Cache for later tester use
             self.latest_codebase_index = codebase_index
             

@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, Optional, List
 from crewai_app.utils.logger import logger, file_handler, console_handler
+from crewai_app.services.conversation_service import ConversationService
 
 class BaseAgent:
     """
@@ -15,19 +16,28 @@ class BaseAgent:
         "[\n  {\"file\": \"frontend/projects/freelancer/profile/src/app/example.component.ts\", \"code\": \"import { Component } from '@angular/core';\\n@Component({\\n  selector: 'app-example',\\n  templateUrl: './example.component.html',\\n  styleUrls: ['./example.component.scss']\\n})\\nexport class ExampleComponent { }\"},\n  {\"file\": \"frontend/projects/freelancer/profile/src/app/example.component.html\", \"code\": \"<div>Example works!</div>\"}\n]\n"
     )
 
-    def __init__(self, llm_service, name: str, role: str, goal: str, backstory: str, tools: Optional[list] = None):
+    def __init__(self, llm_service, name: str, role: str, goal: str, backstory: str, tools: Optional[list] = None, 
+                 workflow_id: Optional[int] = None, step_name: Optional[str] = None):
         self.llm_service = llm_service
         self.name = name
         self.role = role
         self.goal = goal
         self.backstory = backstory
         self.tools = tools or []
+        self.workflow_id = workflow_id
+        self.step_name = step_name or "default"
         self.logger = logging.getLogger(f"ai_team.{self.name}")
         self.shared_context: Dict[str, Any] = {}  # For agent collaboration
         self.llm_cache: Dict[str, Any] = {}
         self.last_llm_output = None
         self.escalation_history: List[Dict[str, Any]] = []  # Track escalations
         self.collaboration_requests: List[Dict[str, Any]] = []  # Track collaboration
+        
+        # Initialize conversation service for persistence
+        self.conversation_service = None
+        if workflow_id:
+            self.conversation_service = ConversationService(workflow_id, self.name, self.step_name)
+        
         # Ensure agent logger has handlers
         if not self.logger.hasHandlers():
             self.logger.addHandler(file_handler)
@@ -37,19 +47,54 @@ class BaseAgent:
 
     def _run_llm(self, prompt: str, step: Optional[str] = None, max_retries: int = 2, max_tokens: int = 1024, **kwargs) -> str:
         """
-        Run the LLM with retries, caching, and logging.
+        Run the LLM with retries, caching, logging, and conversation persistence.
         """
         cache_key = (prompt, step, max_tokens)
         if cache_key in self.llm_cache:
             return self.llm_cache[cache_key]
+        
+        # Persist user message if conversation service available
+        if self.conversation_service:
+            self.conversation_service.append_message(
+                role="user",
+                content=prompt,
+                metadata={"step": step, "agent": self.name, "max_tokens": max_tokens}
+            )
+        
         for attempt in range(1, max_retries + 2):
             try:
                 result = self.llm_service.generate(prompt, step=step, max_tokens=max_tokens, **kwargs)
                 self.logger.info(f"[LLM Output] ({step or 'default'}, attempt {attempt}): {result}")
+                
+                # Persist assistant response if conversation service available
+                if self.conversation_service:
+                    self.conversation_service.append_message(
+                        role="assistant",
+                        content=result,
+                        metadata={"step": step, "agent": self.name, "attempt": attempt}
+                    )
+                
                 self.llm_cache[cache_key] = result
                 return result
             except Exception as e:
                 self.logger.error(f"[LLM Error] ({step or 'default'}, attempt {attempt}): {e}")
+                
+                # Persist error message if conversation service available
+                if self.conversation_service:
+                    self.conversation_service.append_message(
+                        role="system",
+                        content=f"LLM Error (attempt {attempt}): {str(e)}",
+                        metadata={"step": step, "agent": self.name, "error": True, "attempt": attempt}
+                    )
+        
+        # Final error - persist terminal message
+        if self.conversation_service:
+            self.conversation_service.append_message(
+                role="system",
+                content=f"LLM failed after {max_retries+1} attempts for step {step or 'default'}",
+                metadata={"step": step, "agent": self.name, "terminal": True, "max_attempts": max_retries+1}
+            )
+        
         raise RuntimeError(f"LLM failed after {max_retries+1} attempts for step {step or 'default'}.")
 
     def parse_output(self, output: str, parse_type: str = "json") -> Any:
@@ -98,6 +143,25 @@ class BaseAgent:
         self.logger.info(f"[Escalation] Escalating to {to_agent}: {reason}")
         self.logger.info(f"[Escalation] Context: {context}")
         
+        # Persist escalation message if conversation service available
+        if self.conversation_service:
+            self.conversation_service.append_message(
+                role="system",
+                content=f"ESCALATION: {reason}",
+                artifacts=[{
+                    "type": "escalation",
+                    "id": f"escalation_{len(self.escalation_history)}",
+                    "uri": f"escalation://{self.name}->{to_agent}",
+                    "metadata": escalation
+                }],
+                metadata={
+                    "escalation": True,
+                    "to_agent": to_agent,
+                    "priority": priority,
+                    "context": context
+                }
+            )
+        
         return escalation
 
     def request_collaboration(self, target_agent: str, request_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -117,6 +181,25 @@ class BaseAgent:
         self.collaboration_requests.append(collaboration)
         self.logger.info(f"[Collaboration] Requesting {request_type} from {target_agent}")
         self.logger.info(f"[Collaboration] Data: {data}")
+        
+        # Persist collaboration message if conversation service available
+        if self.conversation_service:
+            self.conversation_service.append_message(
+                role="system",
+                content=f"COLLABORATION REQUEST: {request_type}",
+                artifacts=[{
+                    "type": "collaboration",
+                    "id": f"collab_{len(self.collaboration_requests)}",
+                    "uri": f"collaboration://{self.name}->{target_agent}",
+                    "metadata": collaboration
+                }],
+                metadata={
+                    "collaboration": True,
+                    "to_agent": target_agent,
+                    "request_type": request_type,
+                    "data": data
+                }
+            )
         
         return collaboration
 
@@ -300,7 +383,7 @@ class BaseAgent:
             self.logger.info(f"[{self.name}] Single-file LLM prompt for {file_path}: {single_file_prompt}")
             
             # Use smaller max_tokens for single file to avoid truncation
-            file_code_str = get_llm_response_with_retry(single_file_prompt, step=f"{step_prefix}.single_file", max_tokens=2048)
+            file_code_str = get_llm_response_with_retry(single_file_prompt, step=f"{step_prefix}.single_file", max_tokens=4048)
             self.last_llm_output = file_code_str
             self.logger.info(f"[{self.name}] Single-file LLM output for {file_path}: {file_code_str}")
             

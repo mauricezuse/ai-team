@@ -2,8 +2,10 @@
 Background Workflow Executor Service
 Handles non-blocking workflow execution with proper status tracking
 """
+import asyncio
 import threading
 import time
+import os
 from typing import Dict, Any, Optional
 from datetime import datetime
 from crewai_app.database import get_db, Workflow, Conversation
@@ -11,6 +13,14 @@ from crewai_app.workflows.enhanced_story_workflow import EnhancedStoryWorkflow
 from crewai_app.services.jira_service import JiraService
 from crewai_app.services.workflow_status_service import workflow_status_service
 from crewai_app.utils.logger import logger
+from crewai_app.services.event_stream import post_event
+from crewai_app.database import SessionLocal
+import threading as _threading
+import concurrent.futures
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 class WorkflowExecutor:
     """Manages background workflow execution"""
@@ -18,8 +28,9 @@ class WorkflowExecutor:
     def __init__(self):
         self.running_workflows: Dict[int, Dict[str, Any]] = {}
         self._lock = threading.Lock()
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
     
-    def execute_workflow_async(self, workflow_id: int, execution_id: Optional[int] = None) -> Dict[str, Any]:
+    def execute_workflow_async(self, workflow_id: int, execution_id: Optional[int] = None, resume: bool = False) -> Dict[str, Any]:
         """Start workflow execution in background and return immediately"""
         
         # Check if workflow is already running
@@ -31,18 +42,13 @@ class WorkflowExecutor:
                     "status": "running"
                 }
         
-        # Start background thread
-        thread = threading.Thread(
-            target=self._execute_workflow_background,
-            args=(workflow_id, execution_id),
-            daemon=True
-        )
-        thread.start()
+        # Start background execution using thread pool
+        future = self.executor.submit(self._execute_workflow_background, workflow_id, execution_id, resume)
         
         # Mark as running
         with self._lock:
             self.running_workflows[workflow_id] = {
-                "thread": thread,
+                "future": future,
                 "start_time": datetime.utcnow(),
                 "status": "running"
             }
@@ -55,10 +61,11 @@ class WorkflowExecutor:
             "status": "running"
         }
     
-    def _execute_workflow_background(self, workflow_id: int, execution_id: Optional[int] = None):
+    def _execute_workflow_background(self, workflow_id: int, execution_id: Optional[int] = None, resume: bool = False):
         """Execute workflow in background thread"""
         try:
             logger.info(f"[WorkflowExecutor] Starting background execution for workflow {workflow_id}")
+            post_event(workflow_id, {"type": "log", "level": "info", "message": f"Starting execution for workflow {workflow_id}"})
             
             # Get database session
             db = next(get_db())
@@ -74,18 +81,50 @@ class WorkflowExecutor:
             workflow.started_at = datetime.utcnow()
             db.commit()
             
-            # Start heartbeat tracking
+            # Start heartbeat tracking (service thread) and a local pinger as extra safety
             workflow_status_service.start_workflow_heartbeat(workflow_id)
+            pinger_stop = _threading.Event()
+            def _pinger():
+                while not pinger_stop.is_set():
+                    try:
+                        dbp = SessionLocal()
+                        wf = dbp.query(Workflow).filter(Workflow.id == workflow_id).first()
+                        if wf and wf.status == 'running':
+                            wf.last_heartbeat_at = datetime.utcnow()
+                            dbp.commit()
+                        dbp.close()
+                    except Exception as _e:
+                        logger.debug(f"[WorkflowExecutor] Heartbeat pinger error: {_e}")
+                    time.sleep(10)
+            pinger_thread = _threading.Thread(target=_pinger, daemon=True)
+            pinger_thread.start()
+            post_event(workflow_id, {"type": "status", "status": "running"})
             
             # Check if we should use real Jira or mock data
             use_real_jira = True
             try:
-                jira_service = JiraService(use_real=True)
-                story_data = jira_service.get_story(workflow.jira_story_id)
-                if not story_data:
+                # Test if Jira credentials are available
+                jira_token = os.getenv("NEGISHI_JIRA_API_TOKEN")
+                jira_email = os.getenv("NEGISHI_JIRA_EMAIL")
+                jira_base_url = os.getenv("NEGISHI_JIRA_BASE_URL")
+                
+                logger.info(f"[WorkflowExecutor] Jira credentials check:")
+                logger.info(f"[WorkflowExecutor] Token: {'SET' if jira_token else 'NOT SET'}")
+                logger.info(f"[WorkflowExecutor] Email: {'SET' if jira_email else 'NOT SET'}")
+                logger.info(f"[WorkflowExecutor] Base URL: {'SET' if jira_base_url else 'NOT SET'}")
+                
+                if not all([jira_token, jira_email, jira_base_url]):
+                    logger.warning(f"[WorkflowExecutor] Jira credentials not configured, using mock data")
                     use_real_jira = False
+                else:
+                    # Test Jira connection
+                    jira_service = JiraService(use_real=True)
+                    story_data = jira_service.get_story(workflow.jira_story_id)
+                    if not story_data:
+                        logger.warning(f"[WorkflowExecutor] Jira story {workflow.jira_story_id} not found, using mock data")
+                        use_real_jira = False
             except Exception as e:
-                logger.warning(f"[WorkflowExecutor] Jira story {workflow.jira_story_id} not found: {e}")
+                logger.warning(f"[WorkflowExecutor] Jira connection failed: {e}, using mock data")
                 use_real_jira = False
             
             # Create and run the enhanced workflow
@@ -97,7 +136,7 @@ class WorkflowExecutor:
             )
             
             # Run the workflow and get results
-            results = enhanced_workflow.run()
+            results = enhanced_workflow.run(resume=resume)
             
             # Store the workflow log in the database
             if hasattr(enhanced_workflow, 'workflow_log') and enhanced_workflow.workflow_log:
@@ -114,6 +153,21 @@ class WorkflowExecutor:
                     )
                     db.add(conversation)
                     db.flush()
+
+                    # Emit real-time conversation event
+                    post_event(workflow_id, {
+                        "type": "conversation",
+                        "conversation": {
+                            "id": conversation.id,
+                            "step": conversation.step,
+                            "agent": conversation.agent,
+                            "status": conversation.status,
+                            "details": conversation.details,
+                            "output": conversation.output,
+                            "prompt": conversation.prompt,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                    })
                     
                     # Store code files if they exist
                     if 'code_files' in log_entry and log_entry['code_files']:
@@ -172,11 +226,13 @@ class WorkflowExecutor:
                 "completed", 
                 datetime.utcnow()
             )
+            post_event(workflow_id, {"type": "status", "status": "completed"})
             
             logger.info(f"[WorkflowExecutor] Completed background execution for workflow {workflow_id}")
             
         except Exception as e:
             logger.error(f"[WorkflowExecutor] Background execution failed for workflow {workflow_id}: {e}")
+            post_event(workflow_id, {"type": "log", "level": "error", "message": f"Execution failed: {e}"})
             
             # Finalize workflow status as failed
             try:
@@ -186,6 +242,7 @@ class WorkflowExecutor:
                     datetime.utcnow(),
                     str(e)
                 )
+                post_event(workflow_id, {"type": "status", "status": "failed"})
                 
                 # Update execution status if present
                 if execution_id:
@@ -200,6 +257,10 @@ class WorkflowExecutor:
                 logger.error(f"[WorkflowExecutor] Failed to finalize workflow status: {db_error}")
         
         finally:
+            try:
+                pinger_stop.set()
+            except Exception:
+                pass
             # Remove from running workflows
             with self._lock:
                 if workflow_id in self.running_workflows:
