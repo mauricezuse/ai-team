@@ -25,6 +25,7 @@ from crewai_app.services.background_jobs import refresh_pr_and_checks, refresh_d
 from crewai_app.services.event_stream import try_get_event
 from crewai_app.utils.feature_flags import FeatureFlags
 from crewai_app.services.workflow_status_service import workflow_status_service
+from crewai_app.agents.conversation_reviewer import ConversationReviewerAgent
 import hmac
 import hashlib
 
@@ -1086,6 +1087,30 @@ def refresh_diffs_endpoint(workflow_id: int, tasks: BackgroundTasks):
 def refresh_artifacts_endpoint(workflow_id: int, tasks: BackgroundTasks):
     tasks.add_task(refresh_artifacts, workflow_id)
     return {"message": "Artifacts refresh enqueued"}
+
+# --- Conversation Review API ---
+class ConversationReviewResponse(BaseModel):
+    summary: str
+    workflow_recommendations: List[Dict[str, Any]] = []
+    prompt_recommendations: List[Dict[str, Any]] = []
+    code_change_suggestions: List[Dict[str, Any]] = []
+    risk_flags: List[str] = []
+    quick_wins: List[str] = []
+    estimated_savings: Dict[str, Any] = {"messages": 0, "cost_usd": 0.0, "duration_minutes": 0}
+
+
+@app.post("/workflows/{workflow_id:int}/conversation-review", response_model=ConversationReviewResponse)
+def create_conversation_review(workflow_id: int):
+    agent = ConversationReviewerAgent()
+    result = agent.analyze_workflow(workflow_id)
+    return ConversationReviewResponse(**result)
+
+@app.get("/workflows/{workflow_id:int}/conversation-review", response_model=ConversationReviewResponse)
+def get_conversation_review(workflow_id: int):
+    # For now, stateless: compute fresh
+    agent = ConversationReviewerAgent()
+    result = agent.analyze_workflow(workflow_id)
+    return ConversationReviewResponse(**result)
 
 # --- Models for API ---
 class PlanningInput(BaseModel):
