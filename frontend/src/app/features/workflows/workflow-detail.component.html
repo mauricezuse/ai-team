@@ -556,7 +556,7 @@
           </div>
 
           <!-- Workflow Recommendations -->
-          <div class="review-section" *ngIf="conversationReview.workflow_recommendations?.length > 0">
+          <div class="review-section" *ngIf="conversationReview && conversationReview.workflow_recommendations && conversationReview.workflow_recommendations.length > 0">
             <h4>Workflow Recommendations</h4>
             <div class="recommendations-list">
               <div *ngFor="let rec of conversationReview.workflow_recommendations" class="recommendation-item">
@@ -567,7 +567,7 @@
           </div>
 
           <!-- Prompt Recommendations -->
-          <div class="review-section" *ngIf="conversationReview.prompt_recommendations?.length > 0">
+          <div class="review-section" *ngIf="conversationReview && conversationReview.prompt_recommendations && conversationReview.prompt_recommendations.length > 0">
             <h4>Prompt Engineering Recommendations</h4>
             <div class="recommendations-list">
               <div *ngFor="let rec of conversationReview.prompt_recommendations" class="recommendation-item">
@@ -579,7 +579,7 @@
           </div>
 
           <!-- Code Change Suggestions -->
-          <div class="review-section" *ngIf="conversationReview.code_change_suggestions?.length > 0">
+          <div class="review-section" *ngIf="conversationReview && conversationReview.code_change_suggestions && conversationReview.code_change_suggestions.length > 0">
             <h4>Code Change Suggestions</h4>
             <p-accordion>
               <p-accordionTab *ngFor="let suggestion of conversationReview.code_change_suggestions" 
@@ -612,7 +612,7 @@
           </div>
 
           <!-- Risk Flags -->
-          <div class="review-section" *ngIf="conversationReview.risk_flags?.length > 0">
+          <div class="review-section" *ngIf="conversationReview && conversationReview.risk_flags && conversationReview.risk_flags.length > 0">
             <h4>Risk Flags</h4>
             <div class="risk-flags">
               <span *ngFor="let flag of conversationReview.risk_flags" 
@@ -621,7 +621,7 @@
           </div>
 
           <!-- Quick Wins -->
-          <div class="review-section" *ngIf="conversationReview.quick_wins?.length > 0">
+          <div class="review-section" *ngIf="conversationReview && conversationReview.quick_wins && conversationReview.quick_wins.length > 0">
             <h4>Quick Wins</h4>
             <div class="quick-wins">
               <span *ngFor="let win of conversationReview.quick_wins" 

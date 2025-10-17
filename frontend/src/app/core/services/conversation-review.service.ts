@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { environment } from '../../../environments/environment';
 
 export interface ConversationReviewRequest {
   workflow_id: number;
@@ -39,7 +38,7 @@ export interface ConversationReviewResponse {
   providedIn: 'root'
 })
 export class ConversationReviewService {
-  private apiUrl = environment.apiUrl || 'http://localhost:8000';
+  private apiUrl = '/api/workflows';
 
   constructor(private http: HttpClient) {}
 
