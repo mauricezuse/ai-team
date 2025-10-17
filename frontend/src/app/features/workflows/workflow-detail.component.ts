@@ -565,7 +565,7 @@ describe('${filename.split('.')[0]}', () => {
         this.messageService.add({ 
           severity: 'error', 
           summary: 'Review Failed', 
-          detail: this.reviewError 
+          detail: this.reviewError || 'Unknown error' 
         });
       }
     });
@@ -596,7 +596,7 @@ describe('${filename.split('.')[0]}', () => {
         this.messageService.add({ 
           severity: 'error', 
           summary: 'Refresh Failed', 
-          detail: this.reviewError 
+          detail: this.reviewError || 'Unknown error' 
         });
       }
     });
