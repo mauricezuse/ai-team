@@ -478,6 +478,78 @@ class ArchitectAgent:
         self._cache_set(prompt_hash, json.dumps(plan))
         return json.dumps(plan), {}
 
+    def handle_collaboration_request(self, request: dict, workflow_id: int | None = None, conversation_id: int | None = None) -> dict:
+        """Handle collaboration/escalation requests from other agents.
+
+        This provides a stable API expected by tests and workflows. The architect reviews
+        the request details and returns structured guidance. In case of LLM failure,
+        returns a conservative fallback response.
+        """
+        try:
+            topic = str(request.get('topic') or request.get('title') or 'Collaboration Request')
+            details = str(request.get('details') or request.get('description') or '')[:800]
+            context_snippet = str(request.get('context') or '')[:800]
+
+            prompt = (
+                "You are the Software Architect. Provide concise technical guidance for the following "
+                "collaboration/escalation request. Focus on architecture, data models, APIs, and clear next steps.\n\n"
+                f"Topic: {topic}\n"
+                f"Details: {details}\n"
+                f"Context: {context_snippet}\n\n"
+                "Respond as a compact JSON object with keys: guidance (string), next_steps (array of strings),"
+                " risks (array of strings)."
+            )
+
+            # Persist message if conversation service available
+            if self.conversation_service:
+                self.conversation_service.append_message(
+                    role="user",
+                    content=prompt,
+                    metadata={"step": "architect.collaboration", "agent": "architect"}
+                )
+
+            llm_output = self.llm_service.generate(prompt, step="architect.collaboration", max_tokens=600)
+
+            if self.conversation_service:
+                self.conversation_service.append_message(
+                    role="assistant",
+                    content=llm_output,
+                    metadata={"step": "architect.collaboration", "agent": "architect"}
+                )
+
+            parsed = validate_and_fix_json(llm_output, dict)
+            if not isinstance(parsed, dict):
+                raise ValueError("LLM did not return a dict")
+
+            # Normalize keys
+            guidance = str(parsed.get('guidance') or parsed.get('advice') or '').strip()
+            next_steps = parsed.get('next_steps') or parsed.get('actions') or []
+            risks = parsed.get('risks') or []
+
+            if not isinstance(next_steps, list):
+                next_steps = [str(next_steps)]
+            if not isinstance(risks, list):
+                risks = [str(risks)]
+
+            response = {
+                "guidance": guidance or "Proceed with a minimal, test-driven implementation aligned to existing modules.",
+                "next_steps": [str(s).strip() for s in next_steps if str(s).strip()],
+                "risks": [str(r).strip() for r in risks if str(r).strip()]
+            }
+            return response
+        except Exception as e:
+            logger.error(f"[ArchitectAgent] handle_collaboration_request error: {e}")
+            return {
+                "guidance": "Unable to produce detailed guidance at this time. Use existing patterns and keep changes minimal.",
+                "next_steps": [
+                    "Identify impacted modules and interfaces",
+                    "Draft minimal changes and update API contracts if needed",
+                    "Add unit tests and integration tests",
+                    "Open a small PR for review"
+                ],
+                "risks": ["Scope creep", "Breaking existing contracts", "Insufficient test coverage"]
+            }
+
     def llm_validate_plan(self, plan, codebase_index):
         prompt = (
             "You are an expert software architect. "

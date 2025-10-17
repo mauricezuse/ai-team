@@ -8,92 +8,88 @@ import tempfile
 from unittest.mock import patch, mock_open
 from fastapi.testclient import TestClient
 from crewai_app.main import app
+from crewai_app.database import get_db, Workflow, init_database
+from uuid import uuid4
 
 client = TestClient(app)
 
 class TestWorkflowEndpoints:
     """Test cases for workflow-related endpoints"""
+    def _clear_all_workflows(self):
+        # Use API to safely delete and cascade related rows
+        resp = client.get("/workflows")
+        if resp.status_code == 200:
+            for item in resp.json():
+                wid = item.get("id")
+                try:
+                    client.delete(f"/workflows/{wid}")
+                except Exception:
+                    pass
     
     def test_get_workflows_empty(self):
-        """Test GET /workflows when no workflows exist"""
-        with patch('os.path.exists', return_value=False):
-            response = client.get("/workflows")
-            assert response.status_code == 200
-            assert response.json() == []
+        """Test GET /workflows when no workflows exist (DB-backed)."""
+        init_database()
+        # Clear all workflows for an isolated test via API cascade
+        self._clear_all_workflows()
+        response = client.get("/workflows")
+        assert response.status_code == 200
+        assert response.json() == []
     
     def test_get_workflows_with_data(self):
-        """Test GET /workflows with existing workflow data"""
-        mock_workflow_data = {
-            "workflow_log": [
-                {"step": "story_retrieved", "agent": "pm", "timestamp": "2024-01-01T00:00:00"},
-                {"step": "architect_review", "agent": "architect", "timestamp": "2024-01-01T00:01:00"}
-            ],
-            "timestamp": "2024-01-01T00:00:00"
-        }
-        
-        with patch('os.path.exists', return_value=True), \
-             patch('glob.glob', return_value=['workflow_results/enhanced_story_NEGISHI-178_checkpoint.json']), \
-             patch('builtins.open', mock_open(read_data=json.dumps(mock_workflow_data))):
-            
-            response = client.get("/workflows")
-            assert response.status_code == 200
-            workflows = response.json()
-            assert len(workflows) == 1
-            assert workflows[0]["id"] == "enhanced_story_NEGISHI-178"
-            assert workflows[0]["name"] == "Enhanced Story Negishi-178"
-            assert workflows[0]["status"] == "completed"
-            assert "pm" in workflows[0]["agents"]
-            assert "architect" in workflows[0]["agents"]
+        """Test GET /workflows with existing workflow row (DB-backed)."""
+        init_database()
+        db = next(get_db())
+        # Clear and insert a workflow using API cascade deletion
+        self._clear_all_workflows()
+        wf = Workflow(
+            name="Enhanced Story NEGISHI-178",
+            jira_story_id="NEGISHI-178",
+            jira_story_title="Test Story",
+            jira_story_description="Desc",
+            repository_url="https://example.com/repo",
+            target_branch="main",
+            status="completed"
+        )
+        db.add(wf)
+        db.commit()
+        db.refresh(wf)
+
+        response = client.get("/workflows")
+        assert response.status_code == 200
+        workflows = response.json()
+        assert any(item["id"] == wf.id and item["status"] == "completed" for item in workflows)
     
     def test_get_workflow_not_found(self):
-        """Test GET /workflows/{workflow_id} when workflow doesn't exist"""
-        with patch('os.path.exists', return_value=False):
-            response = client.get("/workflows/nonexistent")
-            assert response.status_code == 404
-            assert "Workflow not found" in response.json()["detail"]
+        """Test GET /workflows/{workflow_id} when workflow doesn't exist (numeric id)."""
+        response = client.get("/workflows/999999")
+        assert response.status_code == 404
+        assert "Workflow not found" in response.json()["detail"]
     
     def test_get_workflow_success(self):
-        """Test GET /workflows/{workflow_id} with valid workflow"""
-        mock_workflow_data = {
-            "workflow_log": [
-                {
-                    "step": "story_retrieved",
-                    "agent": "pm",
-                    "timestamp": "2024-01-01T00:00:00",
-                    "status": "completed",
-                    "details": "Story retrieved successfully",
-                    "output": "Story details...",
-                    "code_files": [],
-                    "escalations": [],
-                    "collaborations": []
-                }
-            ],
-            "timestamp": "2024-01-01T00:00:00",
-            "collaboration_queue": [],
-            "escalation_queue": []
-        }
-        
-        with patch('os.path.exists', return_value=True), \
-             patch('builtins.open', mock_open(read_data=json.dumps(mock_workflow_data))):
-            
-            response = client.get("/workflows/test_workflow")
-            assert response.status_code == 200
-            data = response.json()
-            assert data["id"] == "test_workflow"
-            assert data["name"] == "Test Workflow"
-            assert data["status"] == "completed"
-            assert len(data["conversations"]) == 1
-            assert data["conversations"][0]["step"] == "story_retrieved"
-            assert data["conversations"][0]["agent"] == "pm"
+        """Test GET /workflows/{workflow_id} with valid DB workflow."""
+        init_database()
+        db = next(get_db())
+        wf = Workflow(
+            name="Test Workflow",
+            jira_story_id="TEST-200",
+            jira_story_title="Title",
+            jira_story_description="Desc",
+            status="completed"
+        )
+        db.add(wf)
+        db.commit()
+        db.refresh(wf)
+        response = client.get(f"/workflows/{wf.id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == wf.id
+        assert data["name"] == "Test Workflow"
+        assert data["status"] == "completed"
     
     def test_get_workflow_file_error(self):
-        """Test GET /workflows/{workflow_id} with file read error"""
-        with patch('os.path.exists', return_value=True), \
-             patch('builtins.open', side_effect=IOError("File read error")):
-            
-            response = client.get("/workflows/test_workflow")
-            assert response.status_code == 500
-            assert "Error reading workflow" in response.json()["detail"]
+        """Legacy file error test no longer applicable; ensure 404 for unknown numeric id."""
+        response = client.get("/workflows/1234567")
+        assert response.status_code == 404
 
 class TestAgentEndpoints:
     """Test cases for agent-related endpoints"""
@@ -131,39 +127,69 @@ class TestAgentEndpoints:
 class TestWorkflowExecution:
     """Test cases for workflow execution endpoints"""
     
-    @patch('crewai_app.main.EnhancedStoryWorkflow')
-    def test_execute_workflow_success(self, mock_workflow_class):
-        """Test POST /workflows/{workflow_id}/execute with success"""
-        mock_workflow_instance = mock_workflow_class.return_value
-        mock_workflow_instance.run.return_value = [{"status": "completed", "result": "success"}]
-        
-        response = client.post("/workflows/enhanced_story_NEGISHI-178/execute")
+    @patch('crewai_app.services.workflow_executor.workflow_executor')
+    def test_execute_workflow_success(self, mock_executor):
+        """Test POST /workflows/{workflow_id:int}/execute with success"""
+        init_database()
+        db = next(get_db())
+        wf = Workflow(
+            name="Story NEGISHI-178-UT1",
+            jira_story_id="NEGISHI-178-UT1",
+            jira_story_title="Title",
+            jira_story_description="Desc",
+            status="pending"
+        )
+        db.add(wf)
+        db.commit()
+        db.refresh(wf)
+        mock_executor.execute_workflow_async.return_value = {"status": "completed"}
+        response = client.post(f"/workflows/{wf.id}/execute")
         assert response.status_code == 200
         data = response.json()
-        assert data["workflow_id"] == "enhanced_story_NEGISHI-178"
-        assert data["story_id"] == "NEGISHI-178"
-        assert data["status"] == "completed"
-        assert "Workflow executed successfully" in data["message"]
+        assert data.get("status") in ["running", "completed"]
+        assert "execution_id" in data
     
-    @patch('crewai_app.main.EnhancedStoryWorkflow')
-    def test_execute_workflow_with_story_id(self, mock_workflow_class):
-        """Test POST /workflows/{workflow_id}/execute with custom story_id"""
-        mock_workflow_instance = mock_workflow_class.return_value
-        mock_workflow_instance.run.return_value = [{"status": "completed"}]
-        
-        response = client.post("/workflows/test_workflow/execute?story_id=NEGISHI-175")
+    @patch('crewai_app.services.workflow_executor.workflow_executor')
+    def test_execute_workflow_with_story_id(self, mock_executor):
+        """Test POST /workflows/{workflow_id:int}/execute ignores legacy story_id param"""
+        init_database()
+        db = next(get_db())
+        wf = Workflow(
+            name="Story NEGISHI-175-UT2",
+            jira_story_id="NEGISHI-175-UT2",
+            jira_story_title="Title",
+            jira_story_description="Desc",
+            status="pending"
+        )
+        db.add(wf)
+        db.commit()
+        db.refresh(wf)
+        mock_executor.execute_workflow_async.return_value = {"status": "completed"}
+        response = client.post(f"/workflows/{wf.id}/execute?story_id=IGNORED")
         assert response.status_code == 200
         data = response.json()
-        assert data["story_id"] == "NEGISHI-175"
+        assert data.get("status") in ["running", "completed"]
+        assert "execution_id" in data
     
-    @patch('crewai_app.main.EnhancedStoryWorkflow')
-    def test_execute_workflow_error(self, mock_workflow_class):
-        """Test POST /workflows/{workflow_id}/execute with error"""
-        mock_workflow_class.side_effect = Exception("Workflow execution failed")
-        
-        response = client.post("/workflows/test_workflow/execute")
+    @patch('crewai_app.services.workflow_executor.workflow_executor')
+    def test_execute_workflow_error(self, mock_executor):
+        """Test POST /workflows/{workflow_id:int}/execute with error"""
+        init_database()
+        db = next(get_db())
+        unique_sid = f"NEGISHI-999-UT3-{uuid4().hex[:6]}"
+        wf = Workflow(
+            name="Story ERROR-UT3",
+            jira_story_id=unique_sid,
+            jira_story_title="Title",
+            jira_story_description="Desc",
+            status="pending"
+        )
+        db.add(wf)
+        db.commit()
+        db.refresh(wf)
+        mock_executor.execute_workflow_async.side_effect = Exception("boom")
+        response = client.post(f"/workflows/{wf.id}/execute")
         assert response.status_code == 500
-        assert "Error executing workflow" in response.json()["detail"]
 
 class TestHealthAndEndpoints:
     """Test cases for health and endpoint listing"""

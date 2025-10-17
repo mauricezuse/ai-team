@@ -15,6 +15,37 @@ client = TestClient(app)
 class TestWorkflow12ErrorSimulation:
     """Test error scenarios specifically for workflow 12 (NEGISHI-165)"""
     
+    def setup_method(self):
+        """Create a mock workflow with ID 12 for these tests"""
+        from crewai_app.database import get_db, init_database
+        init_database()
+        
+        db = next(get_db())
+        
+        # Clean up any existing workflow with ID 12 or jira_story_id NEGISHI-165
+        db.query(Workflow).filter(
+            (Workflow.id == 12) | (Workflow.jira_story_id == "NEGISHI-165")
+        ).delete()
+        db.commit()
+        
+        workflow = Workflow(
+            id=12,
+            name="NEGISHI-165: Test Error Workflow",
+            jira_story_id="NEGISHI-165",
+            jira_story_title="Test Error Workflow",
+            jira_story_description="This is a test workflow designed to simulate an error.",
+            status="failed",
+            error="Simulated error: Database connection timeout.",
+            started_at=datetime.utcnow() - timedelta(minutes=10),
+            finished_at=datetime.utcnow() - timedelta(minutes=5),
+            created_at=datetime.utcnow() - timedelta(minutes=15),
+            updated_at=datetime.utcnow() - timedelta(minutes=5)
+        )
+        db.add(workflow)
+        db.commit()
+        self.workflow_id = workflow.id
+        self.db_session = db
+    
     def test_workflow_12_exists(self):
         """Test that workflow 12 exists and can be retrieved"""
         response = client.get("/workflows/12")

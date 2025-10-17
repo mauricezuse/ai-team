@@ -117,7 +117,7 @@ class WorkflowOrchestrator:
             
             # Step 3: Route to appropriate workflow
             if complexity == TaskComplexity.SIMPLE:
-                return self._execute_streamlined_workflow(story_id, story, complexity, workflow_config, start_time)
+                return self._execute_streamlined_workflow(story, complexity, workflow_config, start_time)
             elif complexity == TaskComplexity.MEDIUM:
                 return self._execute_medium_workflow(story_id, story, complexity, workflow_config, start_time)
             else:
