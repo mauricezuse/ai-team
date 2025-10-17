@@ -503,6 +503,142 @@
         </div>
       </ng-template>
     </p-tabPanel>
+
+    <p-tabPanel header="Conversation Review" data-testid="tab-conversation-review">
+      <div class="conversation-review-section">
+        <div class="review-header">
+          <h3>AI-Powered Workflow Optimization</h3>
+          <p>Analyze agent conversations to get optimization suggestions for workflow efficiency and prompt engineering.</p>
+          <div class="review-actions">
+            <button pButton type="button" 
+                    label="Generate Review" 
+                    icon="pi pi-search" 
+                    (click)="generateConversationReview()"
+                    [loading]="isGeneratingReview"
+                    data-testid="generate-review-button"
+                    class="p-button-primary"></button>
+            <button pButton type="button" 
+                    label="Refresh Review" 
+                    icon="pi pi-refresh" 
+                    (click)="refreshConversationReview()"
+                    [loading]="isLoadingReview"
+                    data-testid="refresh-review-button"
+                    class="p-button-outlined"></button>
+          </div>
+        </div>
+
+        <div *ngIf="conversationReview" class="review-results" data-testid="conversation-review-results">
+          <!-- Summary Section -->
+          <div class="review-section">
+            <h4>Summary</h4>
+            <div class="summary-content">
+              <p>{{ conversationReview.summary }}</p>
+            </div>
+          </div>
+
+          <!-- Estimated Savings -->
+          <div class="review-section" *ngIf="conversationReview.estimated_savings">
+            <h4>Estimated Savings</h4>
+            <div class="savings-grid">
+              <div class="savings-item">
+                <span class="savings-label">Messages:</span>
+                <span class="savings-value">{{ conversationReview.estimated_savings.messages }}</span>
+              </div>
+              <div class="savings-item">
+                <span class="savings-label">Cost:</span>
+                <span class="savings-value">${{ conversationReview.estimated_savings.cost_usd }}</span>
+              </div>
+              <div class="savings-item">
+                <span class="savings-label">Duration:</span>
+                <span class="savings-value">{{ conversationReview.estimated_savings.duration_minutes }} min</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Workflow Recommendations -->
+          <div class="review-section" *ngIf="conversationReview.workflow_recommendations?.length > 0">
+            <h4>Workflow Recommendations</h4>
+            <div class="recommendations-list">
+              <div *ngFor="let rec of conversationReview.workflow_recommendations" class="recommendation-item">
+                <h5>{{ rec.title }}</h5>
+                <p>{{ rec.description }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Prompt Recommendations -->
+          <div class="review-section" *ngIf="conversationReview.prompt_recommendations?.length > 0">
+            <h4>Prompt Engineering Recommendations</h4>
+            <div class="recommendations-list">
+              <div *ngFor="let rec of conversationReview.prompt_recommendations" class="recommendation-item">
+                <div class="agent-badge">{{ rec.agent }}</div>
+                <h5>Issue: {{ rec.current_issue }}</h5>
+                <p><strong>Suggestion:</strong> {{ rec.suggestion }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Code Change Suggestions -->
+          <div class="review-section" *ngIf="conversationReview.code_change_suggestions?.length > 0">
+            <h4>Code Change Suggestions</h4>
+            <p-accordion>
+              <p-accordionTab *ngFor="let suggestion of conversationReview.code_change_suggestions" 
+                              [header]="suggestion.path + ' - ' + suggestion.section"
+                              [selected]="false">
+                <div class="code-suggestion">
+                  <div class="suggestion-header">
+                    <span class="file-path">{{ suggestion.path }}</span>
+                    <span class="change-type">{{ suggestion.change_type }}</span>
+                  </div>
+                  <div class="suggestion-content">
+                    <div class="before-after">
+                      <div class="before">
+                        <h5>Before:</h5>
+                        <p>{{ suggestion.before_summary }}</p>
+                      </div>
+                      <div class="after">
+                        <h5>After:</h5>
+                        <p>{{ suggestion.after_summary }}</p>
+                      </div>
+                    </div>
+                    <div class="patch-outline">
+                      <h5>Implementation:</h5>
+                      <pre>{{ suggestion.patch_outline }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </p-accordionTab>
+            </p-accordion>
+          </div>
+
+          <!-- Risk Flags -->
+          <div class="review-section" *ngIf="conversationReview.risk_flags?.length > 0">
+            <h4>Risk Flags</h4>
+            <div class="risk-flags">
+              <span *ngFor="let flag of conversationReview.risk_flags" 
+                    class="p-chip p-chip-warning">{{ flag }}</span>
+            </div>
+          </div>
+
+          <!-- Quick Wins -->
+          <div class="review-section" *ngIf="conversationReview.quick_wins?.length > 0">
+            <h4>Quick Wins</h4>
+            <div class="quick-wins">
+              <span *ngFor="let win of conversationReview.quick_wins" 
+                    class="p-chip p-chip-success">{{ win }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="!conversationReview && !isGeneratingReview && !isLoadingReview" class="no-review">
+          <p>No conversation review available yet. Click "Generate Review" to analyze this workflow's conversations.</p>
+        </div>
+
+        <div *ngIf="reviewError" class="review-error">
+          <p class="error-message">{{ reviewError }}</p>
+        </div>
+      </div>
+    </p-tabPanel>
   </p-tabView>
 
 </div>

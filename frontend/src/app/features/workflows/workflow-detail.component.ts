@@ -3,6 +3,7 @@ import { ActivatedRoute, RouterModule } from '@angular/router';
 import { WorkflowService } from '../../core/services/workflow.service';
 import { WorkflowAdvancedService } from '../../core/services/workflow-advanced.service';
 import { WorkflowStatusChannelService } from '../../core/services/workflow-status-channel.service';
+import { ConversationReviewService, ConversationReviewResponse } from '../../core/services/conversation-review.service';
 import { CommonModule } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -69,12 +70,19 @@ export class WorkflowDetailComponent implements OnInit, OnDestroy {
   isLoadingChecks: boolean = true;
   isLoadingDiffs: boolean = true;
   isLoadingArtifacts: boolean = true;
+  
+  // Conversation Review
+  conversationReview: ConversationReviewResponse | null = null;
+  isGeneratingReview: boolean = false;
+  isLoadingReview: boolean = false;
+  reviewError: string | null = null;
 
   constructor(
     private route: ActivatedRoute, 
     private workflowService: WorkflowService,
     private advancedService: WorkflowAdvancedService,
     private statusChannelService: WorkflowStatusChannelService,
+    private conversationReviewService: ConversationReviewService,
     private messageService: MessageService,
     private cdr: ChangeDetectorRef
   ) {}
@@ -529,5 +537,68 @@ describe('${filename.split('.')[0]}', () => {
     // Create a header for the LLM call accordion tab
     const timestamp = new Date(call.timestamp).toLocaleTimeString();
     return `${call.model} - ${call.total_tokens} tokens - $${call.cost} - ${timestamp}`;
+  }
+
+  // Conversation Review Methods
+  generateConversationReview(): void {
+    if (!this.workflowId) return;
+    
+    this.isGeneratingReview = true;
+    this.reviewError = null;
+    this.cdr.detectChanges();
+    
+    this.conversationReviewService.triggerReview(this.workflowId).subscribe({
+      next: (review) => {
+        this.conversationReview = review;
+        this.isGeneratingReview = false;
+        this.cdr.detectChanges();
+        this.messageService.add({ 
+          severity: 'success', 
+          summary: 'Review Generated', 
+          detail: 'Conversation review completed successfully' 
+        });
+      },
+      error: (error) => {
+        this.reviewError = error.error?.detail || 'Failed to generate conversation review';
+        this.isGeneratingReview = false;
+        this.cdr.detectChanges();
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Review Failed', 
+          detail: this.reviewError 
+        });
+      }
+    });
+  }
+
+  refreshConversationReview(): void {
+    if (!this.workflowId) return;
+    
+    this.isLoadingReview = true;
+    this.reviewError = null;
+    this.cdr.detectChanges();
+    
+    this.conversationReviewService.getReview(this.workflowId).subscribe({
+      next: (review) => {
+        this.conversationReview = review;
+        this.isLoadingReview = false;
+        this.cdr.detectChanges();
+        this.messageService.add({ 
+          severity: 'success', 
+          summary: 'Review Refreshed', 
+          detail: 'Conversation review data updated' 
+        });
+      },
+      error: (error) => {
+        this.reviewError = error.error?.detail || 'Failed to load conversation review';
+        this.isLoadingReview = false;
+        this.cdr.detectChanges();
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Refresh Failed', 
+          detail: this.reviewError 
+        });
+      }
+    });
   }
 }
