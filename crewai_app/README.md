@@ -45,14 +45,20 @@ crewai_app/
 │   ├── conversation_service.py # Conversation persistence and message tracking
 │   ├── llm_tracking_service.py # LLM call tracking and cost management
 │   ├── event_stream.py        # Real-time event streaming
-│   └── cloud_provider_service.py # Cloud provider service layer
+│   ├── cloud_provider_service.py # Cloud provider service layer
+│   ├── aws_bedrock_service.py # AWS Bedrock LLM integration
+│   ├── aws_opensearch_service.py # AWS OpenSearch vector store integration
+│   ├── aws_rds_service.py     # AWS RDS database integration
+│   ├── aws_sqs_service.py     # AWS SQS messaging integration
+│   └── aws_s3_service.py      # AWS S3 storage integration
 ├── models/             # Database models and schemas
 │   ├── workflow.py     # Workflow database model
 │   ├── conversation.py # Conversation database model
 │   ├── code_file.py    # Code file database model
 │   └── message.py      # Message-level persistence model
 ├── tests/              # Test suites
-│   └── test_cloud_providers.py # Cloud provider unit tests
+│   ├── test_cloud_providers.py # Cloud provider unit tests
+│   └── test_aws_services.py    # AWS services unit tests
 └── utils/              # Utility functions
     ├── logger.py       # Logging configuration
     ├── logging_sse.py  # Logging and SSE parity helper
@@ -126,6 +132,38 @@ Platform-agnostic cloud provider support enabling seamless switching between Azu
 - **Service Layer**: `CloudProviderService` for clean interface management
 - **Error Handling**: Provider-specific error classes and validation
 - **Configuration-Driven**: Environment-based provider selection
+
+### AWS Services Integration
+Comprehensive AWS service integration for production-ready cloud operations:
+
+- **AWS Bedrock**: LLM operations with Claude and other foundation models
+- **AWS OpenSearch**: Vector storage and semantic search capabilities
+- **AWS RDS**: Managed database services with PostgreSQL/MySQL support
+- **AWS SQS**: Message queuing for asynchronous processing
+- **AWS S3**: Object storage for files, artifacts, and backups
+
+#### AWS Service Usage
+```python
+from crewai_app.services.aws_bedrock_service import AWSBedrockService
+from crewai_app.services.aws_s3_service import AWSS3Service
+
+# AWS Bedrock for LLM operations
+bedrock_config = {
+    "region": "us-east-1",
+    "credentials": {"aws_access_key_id": "your-key", "aws_secret_access_key": "your-secret"},
+    "model_id": "anthropic.claude-3-sonnet-20240229-v1:0"
+}
+bedrock_service = AWSBedrockService(bedrock_config)
+response = bedrock_service.generate_text("Your prompt here")
+
+# AWS S3 for file storage
+s3_config = {
+    "region": "us-east-1",
+    "credentials": {"aws_access_key_id": "your-key", "aws_secret_access_key": "your-secret"}
+}
+s3_service = AWSS3Service(s3_config)
+s3_service.upload_file("my-bucket", "local-file.txt", "remote-file.txt")
+```
 
 #### Usage Example
 ```python
@@ -297,11 +335,14 @@ AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
 
 # Cloud Provider Configuration (AWS)
-# CLOUD_PROVIDER=aws
-# AWS_REGION=us-east-1
-# AWS_ACCESS_KEY_ID=your-access-key
-# AWS_SECRET_ACCESS_KEY=your-secret-key
-# AWS_OPENSEARCH_DOMAIN=your-opensearch-domain
+CLOUD_PROVIDER=aws
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_OPENSEARCH_DOMAIN=your-opensearch-domain
+AWS_S3_BUCKET=your-s3-bucket
+AWS_SQS_QUEUE_URL=your-sqs-queue-url
+AWS_RDS_INSTANCE_ID=your-rds-instance
 
 # Feature Flags
 AI_TEAM_REDACT_SENSITIVE=1
@@ -329,6 +370,9 @@ pytest tests/
 
 # Run cloud provider tests specifically
 pytest crewai_app/tests/test_cloud_providers.py -v
+
+# Run AWS services tests specifically
+pytest crewai_app/tests/test_aws_services.py -v
 
 # Test API endpoints
 curl http://localhost:8000/health
