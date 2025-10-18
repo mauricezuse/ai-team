@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from crewai_app.config.cloud_providers import CloudProviderManager, CloudProvider
+from crewai_app.providers.cloud_providers import CloudProviderManager, CloudProvider
 
 
 class CloudProviderService:

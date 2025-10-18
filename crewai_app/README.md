@@ -32,8 +32,8 @@ crewai_app/
 │   ├── frontend.py     # Frontend Developer agent
 │   ├── tester.py       # QA Tester agent
 │   └── reviewer.py     # Code Reviewer agent
-├── config/             # Configuration and cloud provider abstraction
-│   ├── __init__.py     # Configuration package
+├── providers/          # Cloud provider abstraction layer
+│   ├── __init__.py     # Providers package
 │   └── cloud_providers.py # Cloud provider abstraction layer
 ├── workflows/          # Workflow orchestration logic
 │   ├── story_implementation_workflow.py

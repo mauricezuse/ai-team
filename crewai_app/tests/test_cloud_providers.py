@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import Mock
-from crewai_app.config.cloud_providers import (
+from crewai_app.providers.cloud_providers import (
     CloudProvider, AzureProvider, AWSProvider, 
     CloudProviderManager, CloudProviderType,
     CloudProviderError, AzureProviderError, AWSProviderError, ConfigurationError
